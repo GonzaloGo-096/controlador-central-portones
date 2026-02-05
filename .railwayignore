@@ -1,0 +1,4 @@
+# No subir credenciales
+.env
+.env.local
+.env.*.local

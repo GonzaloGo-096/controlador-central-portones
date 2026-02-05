@@ -13,6 +13,7 @@ const mqtt = require("mqtt");
 const { EVENTS } = require("../core/stateMachine");
 
 const STATUS_TOPIC_PATTERN = "portones/+/status";
+const STATUS_TOPIC_TEMPLATE = "portones/{portonId}/status";
 const COMMAND_TOPIC_TEMPLATE = "portones/{portonId}/command";
 
 const VALID_COMMANDS = ["OPEN", "CLOSE", "STOP"];
@@ -84,6 +85,21 @@ function createMqttClient(config, getStateMachine, onStateChange) {
             console.log(`📥 Suscrito a ${STATUS_TOPIC_PATTERN}`);
           }
         });
+
+        if (config.testOnConnect) {
+          const testTopic = STATUS_TOPIC_TEMPLATE.replace("{portonId}", "test");
+          const testPayload = {
+            event: "PRESS",
+            timestamp: new Date().toISOString(),
+          };
+          client.publish(testTopic, JSON.stringify(testPayload), (err) => {
+            if (err) {
+              console.error("❌ Error al publicar test:", err.message);
+            } else {
+              console.log(`📤 Mensaje de prueba publicado en ${testTopic}:`, JSON.stringify(testPayload));
+            }
+          });
+        }
       });
 
       client.on("error", (err) => {
@@ -173,5 +189,6 @@ function createMqttClient(config, getStateMachine, onStateChange) {
 module.exports = {
   createMqttClient,
   STATUS_TOPIC_PATTERN,
+  STATUS_TOPIC_TEMPLATE,
   COMMAND_TOPIC_TEMPLATE,
 };
