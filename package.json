@@ -1,0 +1,34 @@
+{
+  "name": "controlador-central-portones",
+  "version": "1.0.0",
+  "description": "Controlador central de portones basado en MQTT y lógica de estado",
+  "keywords": [
+    "mqtt",
+    "iot",
+    "porton",
+    "esp32",
+    "automation",
+    "nodejs"
+  ],
+  "homepage": "https://github.com/GonzaloGo-096/controlador-central-portones#readme",
+  "bugs": {
+    "url": "https://github.com/GonzaloGo-096/controlador-central-portones/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GonzaloGo-096/controlador-central-portones.git"
+  },
+  "license": "MIT",
+  "author": "Gonzalo Gomez Omil",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "mqtt": "^5.15.0"
+  }
+}
