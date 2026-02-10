@@ -8,7 +8,10 @@
  */
 
 const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+// En Railway no cargar .env: usar solo las variables inyectadas por el panel (así DATABASE_URL no se pisa).
+if (!process.env.RAILWAY_PUBLIC_DOMAIN) {
+  require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+}
 
 const express = require("express");
 const { StateMachine, STATES } = require("./core/stateMachine");
@@ -17,6 +20,7 @@ const { createMqttClient } = require("./mqtt/mqttClient");
 const { createEventsRouter } = require("./api/events.controller");
 const { createTelegramCommandRouter } = require("./api/telegram.command.controller");
 const telegramRouter = require("./api/telegram.controller");
+const prodDbTestRouter = require("./api/prodDbTest");
 const { mqtt: mqttConfig } = require("./config/env");
 
 console.log("🚀 Controlador Central de Portones iniciado");
@@ -61,6 +65,8 @@ try {
 // Servidor HTTP con Express
 const app = express();
 app.use(express.json());
+app.get("/api/ping", (req, res) => res.json({ ok: true, service: "controlador-portones" }));
+app.use("/api", prodDbTestRouter);
 app.use("/api", createEventsRouter(getStateMachine, onStateChange));
 app.use("/api", createTelegramCommandRouter(getStateMachine, onStateChange));
 app.use("/api", telegramRouter);

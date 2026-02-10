@@ -64,7 +64,7 @@ function createMqttClient(config, getStateMachine, onStateChange) {
       }
 
       const options = {
-        clientId: clientId || `controlador-${Date.now()}`,
+        clientId: clientId ? `${clientId}-${process.pid}` : `controlador-${process.pid}-${Date.now()}`,
       };
 
       if (username) {
@@ -78,11 +78,13 @@ function createMqttClient(config, getStateMachine, onStateChange) {
 
       let firstConnect = true;
       client.on("connect", () => {
-        console.log("📡 MQTT conectado al broker");
+        if (firstConnect) {
+          console.log("📡 MQTT conectado al broker");
+        }
         client.subscribe(STATUS_TOPIC_PATTERN, (err) => {
           if (err) {
             console.error("❌ Error al suscribirse a status:", err.message);
-          } else {
+          } else if (firstConnect) {
             console.log(`📥 Suscrito a ${STATUS_TOPIC_PATTERN}`);
           }
         });

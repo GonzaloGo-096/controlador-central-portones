@@ -43,8 +43,10 @@ router.get("/telegram/tenants", async (req, res) => {
     const tenants = await getTenantsWithGates(telegramId);
     res.status(200).json({ tenants });
   } catch (err) {
-    console.error("❌ [GET /api/telegram/tenants] Error:", err.message);
+    console.error("\n❌ [GET /api/telegram/tenants] CAUSA DEL 500:", err.message);
+    if (err.code) console.error("   Código:", err.code);
     if (err.stack) console.error(err.stack);
+    console.error("");
     res.status(500).json({ error: "Internal server error" });
   }
 });

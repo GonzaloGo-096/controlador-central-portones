@@ -1,0 +1,80 @@
+/**
+ * Endpoint temporal de diagnóstico: GET /api/_prod_db_test
+ * Verifica conexión a la DB, tablas y conteos. Fácil de eliminar después.
+ * Solo SELECT; usa el mismo pool que el resto del backend.
+ */
+
+const express = require("express");
+const pool = require("../db/pool");
+
+const router = express.Router();
+
+function getHostPortFromDatabaseUrl(url) {
+  if (!url || typeof url !== "string") return { host: null, port: null };
+  const match = url.match(/@([^:]+):(\d+)/);
+  return match ? { host: match[1], port: match[2] } : { host: null, port: null };
+}
+
+router.get("/_prod_db_test", async (req, res) => {
+  const connectionString = process.env.DATABASE_URL;
+  const { host, port } = getHostPortFromDatabaseUrl(connectionString);
+
+  console.log("[_prod_db_test] Inicio — host:", host, "| port:", port, "| NODE_ENV:", process.env.NODE_ENV || "(no definido)");
+
+  try {
+    // Test 1: conexión
+    const nowResult = await pool.query("SELECT NOW() AS now");
+    const now = nowResult.rows[0]?.now;
+    if (!now) {
+      const err = new Error("SELECT NOW() no devolvió fila");
+      console.error("[_prod_db_test] Error en step connection:", err.message, err.stack);
+      return res.status(500).json({ ok: false, step: "connection", error: err.message });
+    }
+
+    // Test 2: listar tablas
+    let tablesResult;
+    try {
+      tablesResult = await pool.query(`
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        ORDER BY table_name
+      `);
+    } catch (err) {
+      console.error("[_prod_db_test] Error en step list_tables:", err.message, err.stack);
+      return res.status(500).json({ ok: false, step: "list_tables", error: err.message });
+    }
+    const tables = tablesResult.rows.map((r) => r.table_name);
+
+    // Test 3: conteos (solo si existen las tablas)
+    const counts = {};
+    const countSteps = [
+      { key: "users", step: "count_users" },
+      { key: "tenants", step: "count_tenants" },
+      { key: "gates", step: "count_gates" },
+    ];
+    for (const { key, step } of countSteps) {
+      try {
+        const countResult = await pool.query(`SELECT COUNT(*)::int AS c FROM public.${key}`);
+        counts[key] = countResult.rows[0]?.c ?? 0;
+      } catch (err) {
+        console.error("[_prod_db_test] Error en step", step, err.message, err.stack);
+        return res.status(500).json({ ok: false, step, error: err.message });
+      }
+    }
+
+    const payload = {
+      ok: true,
+      now: typeof now === "object" && now.toISOString ? now.toISOString() : String(now),
+      tables,
+      counts,
+    };
+    console.log("[_prod_db_test] OK —", JSON.stringify(payload));
+    return res.status(200).json(payload);
+  } catch (err) {
+    console.error("[_prod_db_test] Error inesperado:", err.message, err.stack);
+    return res.status(500).json({ ok: false, step: "connection", error: err.message });
+  }
+});
+
+module.exports = router;
