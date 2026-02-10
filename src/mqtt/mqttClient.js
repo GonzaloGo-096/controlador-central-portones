@@ -76,6 +76,7 @@ function createMqttClient(config, getStateMachine, onStateChange) {
 
       client = mqtt.connect(brokerUrl, options);
 
+      let firstConnect = true;
       client.on("connect", () => {
         console.log("📡 MQTT conectado al broker");
         client.subscribe(STATUS_TOPIC_PATTERN, (err) => {
@@ -86,7 +87,8 @@ function createMqttClient(config, getStateMachine, onStateChange) {
           }
         });
 
-        if (config.testOnConnect) {
+        if (config.testOnConnect && firstConnect) {
+          firstConnect = false;
           const testTopic = STATUS_TOPIC_TEMPLATE.replace("{portonId}", "test");
           const testPayload = {
             event: "PRESS",

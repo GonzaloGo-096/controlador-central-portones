@@ -79,6 +79,8 @@ function createTelegramCommandRouter(getStateMachine, onStateChange) {
 
       res.status(500).json({ error: "Internal server error" });
     } catch (err) {
+      console.error("❌ [POST /api/telegram/command] Error:", err.message);
+      if (err.stack) console.error(err.stack);
       res.status(500).json({ error: "Internal server error" });
     }
   });
