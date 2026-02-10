@@ -11,8 +11,11 @@ require("dotenv").config();
 
 const express = require("express");
 const { StateMachine, STATES } = require("./core/stateMachine");
+const { dispatch } = require("./core/actionDispatcher");
 const { createMqttClient } = require("./mqtt/mqttClient");
 const { createEventsRouter } = require("./api/events.controller");
+const { createTelegramCommandRouter } = require("./api/telegram.command.controller");
+const telegramRouter = require("./api/telegram.controller");
 const { mqtt: mqttConfig } = require("./config/env");
 
 console.log("🚀 Controlador Central de Portones iniciado");
@@ -43,25 +46,9 @@ function getStateMachine(portonId) {
   return stateMachineRegistry.get(portonId);
 }
 
-// Mapa estado → comando MQTT (solo estados que requieren acción en hardware)
-const STATE_TO_COMMAND = {
-  [STATES.OPENING]: "OPEN",
-  [STATES.CLOSING]: "CLOSE",
-  [STATES.STOPPED]: "STOP",
-};
+const onStateChange = (portonId, result) => dispatch(portonId, result, mqttClient);
 
-const mqttClient = createMqttClient(
-  mqttConfig,
-  getStateMachine,
-  (portonId, result) => {
-    if (!result.changed) return;
-
-    const command = STATE_TO_COMMAND[result.currentState];
-    if (command) {
-      mqttClient.publishCommand(portonId, command);
-    }
-  }
-);
+const mqttClient = createMqttClient(mqttConfig, getStateMachine, onStateChange);
 
 try {
   mqttClient.connect();
@@ -73,14 +60,9 @@ try {
 // Servidor HTTP con Express
 const app = express();
 app.use(express.json());
-app.use("/api", createEventsRouter(getStateMachine, (portonId, result) => {
-  if (!result.changed) return;
-
-  const command = STATE_TO_COMMAND[result.currentState];
-  if (command) {
-    mqttClient.publishCommand(portonId, command);
-  }
-}));
+app.use("/api", createEventsRouter(getStateMachine, onStateChange));
+app.use("/api", createTelegramCommandRouter(getStateMachine, onStateChange));
+app.use("/api", telegramRouter);
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
