@@ -6,7 +6,33 @@ Endpoint **temporal** para verificar que el backend usa la base de datos correct
 
 ---
 
-## Cómo llamarlo
+## Ver el contenido real de la DB de Railway (tablas y columnas)
+
+**GET /api/_prod_schema** — devuelve la estructura exacta de la base a la que está conectado el backend (en Railway, la base de Railway).
+
+### Si ves "Cannot GET /api/_prod_schema"
+
+Railway está corriendo una versión anterior del código (sin ese endpoint). Hacé **push** del repo y **redeploy** en Railway para que tome los últimos cambios.
+
+### Pasos exactos (después del deploy)
+
+1. **Sacá la URL del backend:** Railway → tu proyecto → servicio del **backend** (Node) → pestaña **Settings** o **Variables** → copiá **RAILWAY_PUBLIC_DOMAIN** o la URL que te muestra (ej. `controlador-central-portones-production.up.railway.app`).
+2. **En el navegador:** abrí esta URL (reemplazá `TU-DOMINIO` por lo que copiaste):
+   ```
+   https://TU-DOMINIO/api/_prod_schema
+   ```
+   Ejemplo: `https://controlador-central-portones-production.up.railway.app/api/_prod_schema`
+3. **Desde la terminal** (misma carpeta del proyecto), con tu URL:
+   ```powershell
+   $env:BASE_URL="https://TU-DOMINIO"; node scripts/ver-schema-railway.js
+   ```
+   Reemplazá `TU-DOMINIO` por el mismo valor (ej. `controlador-central-portones-production.up.railway.app`).
+
+- **Respuesta:** `ok`, `host`, `tables` (nombres) y `schema` (cada tabla con lista de columnas: nombre, tipo, nullable). Así podés comparar con tu base local y ver si falta algo antes de igualar con `schema-replace.sql`.
+
+---
+
+## Cómo llamar a _prod_db_test
 
 - **Local:** `GET http://localhost:3030/api/_prod_db_test` (o el `PORT` que uses).
 - **Railway / preview:** `GET https://TU-BACKEND-RAILWAY.up.railway.app/api/_prod_db_test`.

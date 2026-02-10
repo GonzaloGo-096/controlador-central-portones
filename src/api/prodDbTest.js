@@ -77,4 +77,43 @@ router.get("/_prod_db_test", async (req, res) => {
   }
 });
 
+/**
+ * GET /api/_prod_schema — contenido real de la DB (tablas y columnas).
+ * Sirve para ver qué tiene la base de Railway sin conectar desde tu PC.
+ */
+router.get("/_prod_schema", async (req, res) => {
+  const connectionString = process.env.DATABASE_URL;
+  const { host, port } = getHostPortFromDatabaseUrl(connectionString);
+  console.log("[_prod_schema] host:", host, "| port:", port);
+
+  try {
+    const result = await pool.query(
+      `SELECT table_name, column_name, data_type, is_nullable
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+       ORDER BY table_name, ordinal_position`
+    );
+    const schema = {};
+    for (const row of result.rows) {
+      const t = row.table_name;
+      if (!schema[t]) schema[t] = [];
+      schema[t].push({
+        column: row.column_name,
+        type: row.data_type,
+        nullable: row.is_nullable === "YES",
+      });
+    }
+    const payload = {
+      ok: true,
+      host: host || "(no DATABASE_URL)",
+      tables: Object.keys(schema).sort(),
+      schema,
+    };
+    return res.status(200).json(payload);
+  } catch (err) {
+    console.error("[_prod_schema] Error:", err.message, err.stack);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;
