@@ -10,9 +10,14 @@ Endpoint **temporal** para verificar que el backend usa la base de datos correct
 
 **GET /api/_prod_schema** — devuelve la estructura exacta de la base a la que está conectado el backend (en Railway, la base de Railway).
 
-### Si ves "Cannot GET /api/_prod_schema"
+### Si ves 404 en /api/_prod_schema
 
-Railway está corriendo una versión anterior del código (sin ese endpoint). Hacé **push** del repo y **redeploy** en Railway para que tome los últimos cambios.
+Hacé **push** de los últimos cambios y **redeploy** en Railway. Después tenés **dos formas** de ver el schema:
+
+1. **GET /api/_prod_db_test?schema=1** — mismo endpoint de test; con `?schema=1` devuelve tablas y columnas.
+2. **GET /api/_prod_schema** — ruta dedicada (mismo contenido).
+
+Ejemplo: `https://controlador-central-portones-production.up.railway.app/api/_prod_db_test?schema=1`
 
 ### Pasos exactos (después del deploy)
 
