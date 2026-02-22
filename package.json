@@ -26,7 +26,7 @@
     "doc": "docs"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.19.0"
   },
   "scripts": {
     "start": "node src/index.js",
