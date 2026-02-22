@@ -23,6 +23,14 @@ function authenticateBotSecret(req, res, next) {
   return next();
 }
 
+function getTelegramIdFromRequest(req) {
+  const raw = req.method === "GET" ? req.query?.telegramId : req.body?.telegramId;
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return null;
+  }
+  return String(raw);
+}
+
 async function resolveTokenUserFromTelegramId(telegramIdRaw) {
   const credential = await authRepository.findCredentialByTypeAndIdentifier(
     CREDENTIAL_TYPES.TELEGRAM,
@@ -37,6 +45,7 @@ async function resolveTokenUserFromTelegramId(telegramIdRaw) {
     sub: credential.user.id,
     account_id: credential.user.accountId,
     role: credential.user.role,
+    full_name: credential.user.fullName,
   };
 }
 
@@ -77,6 +86,231 @@ async function hasOpenAccess(usuarioToken, portonId) {
   );
   return Boolean(access);
 }
+
+function buildGroupScope(usuarioToken) {
+  if (usuarioToken.role === USER_ROLES.SUPERADMIN) {
+    return {};
+  }
+
+  if (usuarioToken.role === USER_ROLES.ADMIN_CUENTA) {
+    return {
+      accountId: Number(usuarioToken.account_id),
+      isActive: true,
+      deletedAt: null,
+    };
+  }
+
+  return {
+    accountId: Number(usuarioToken.account_id),
+    isActive: true,
+    deletedAt: null,
+    gates: {
+      some: {
+        isActive: true,
+        deletedAt: null,
+        userGates: {
+          some: {
+            userId: Number(usuarioToken.sub),
+            isActive: true,
+            deletedAt: null,
+          },
+        },
+      },
+    },
+  };
+}
+
+function buildGateScope(usuarioToken) {
+  if (usuarioToken.role === USER_ROLES.SUPERADMIN || usuarioToken.role === USER_ROLES.ADMIN_CUENTA) {
+    return {};
+  }
+
+  return {
+    userGates: {
+      some: {
+        userId: Number(usuarioToken.sub),
+        isActive: true,
+        deletedAt: null,
+      },
+    },
+  };
+}
+
+async function resolveBotUserOrFail(req, res) {
+  const telegramId = getTelegramIdFromRequest(req);
+  if (!telegramId) {
+    res.status(400).json({ error: "telegramId es requerido" });
+    return null;
+  }
+
+  const usuarioToken = await resolveTokenUserFromTelegramId(telegramId);
+  if (!usuarioToken) {
+    res.status(404).json({ error: "Usuario de Telegram no encontrado o inactivo" });
+    return null;
+  }
+
+  return usuarioToken;
+}
+
+router.get("/bot/menu", authenticateBotSecret, async (req, res) => {
+  try {
+    const usuarioToken = await resolveBotUserOrFail(req, res);
+    if (!usuarioToken) return;
+
+    const gruposPortonesCount = await prisma.portonGroup.count({
+      where: buildGroupScope(usuarioToken),
+    });
+
+    const canAccessCultivos = usuarioToken.role !== USER_ROLES.OPERADOR;
+    const cultivosCount = canAccessCultivos
+      ? await prisma.cultivo.count({
+          where:
+            usuarioToken.role === USER_ROLES.SUPERADMIN
+              ? { isActive: true, deletedAt: null }
+              : {
+                  accountId: Number(usuarioToken.account_id),
+                  isActive: true,
+                  deletedAt: null,
+                },
+        })
+      : 0;
+
+    return res.status(200).json({
+      user: {
+        id: Number(usuarioToken.sub),
+        fullName: usuarioToken.full_name,
+        accountId: Number(usuarioToken.account_id),
+        role: usuarioToken.role,
+      },
+      modules: [
+        {
+          key: "portones",
+          label: "Portones",
+          enabled: gruposPortonesCount > 0,
+        },
+        {
+          key: "cultivos",
+          label: "Cultivos",
+          enabled: canAccessCultivos && cultivosCount > 0,
+        },
+      ],
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/bot/modulos/portones/grupos", authenticateBotSecret, async (req, res) => {
+  try {
+    const usuarioToken = await resolveBotUserOrFail(req, res);
+    if (!usuarioToken) return;
+
+    const groups = await prisma.portonGroup.findMany({
+      where: buildGroupScope(usuarioToken),
+      include: {
+        _count: {
+          select: {
+            gates: true,
+          },
+        },
+      },
+      orderBy: { id: "asc" },
+    });
+
+    return res.status(200).json({
+      module: "portones",
+      groups: groups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        gatesCount: group._count.gates,
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/bot/modulos/portones/grupos/:grupoId/portones", authenticateBotSecret, async (req, res) => {
+  const grupoId = Number(req.params.grupoId);
+  if (Number.isNaN(grupoId)) {
+    return res.status(400).json({ error: "grupoId inválido" });
+  }
+
+  try {
+    const usuarioToken = await resolveBotUserOrFail(req, res);
+    if (!usuarioToken) return;
+
+    const group = await prisma.portonGroup.findFirst({
+      where: {
+        id: grupoId,
+        ...buildGroupScope(usuarioToken),
+      },
+      select: { id: true, name: true },
+    });
+    if (!group) {
+      return res.status(404).json({ error: "Grupo no encontrado o sin acceso" });
+    }
+
+    const gates = await prisma.gate.findMany({
+      where: {
+        portonGroupId: grupoId,
+        isActive: true,
+        deletedAt: null,
+        ...buildGateScope(usuarioToken),
+      },
+      orderBy: { id: "asc" },
+    });
+
+    return res.status(200).json({
+      module: "portones",
+      group,
+      gates: gates.map((gate) => ({
+        id: gate.id,
+        name: gate.name,
+        identifier: gate.identifier,
+        state: gate.state,
+        location: gate.location,
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/bot/modulos/cultivos", authenticateBotSecret, async (req, res) => {
+  try {
+    const usuarioToken = await resolveBotUserOrFail(req, res);
+    if (!usuarioToken) return;
+
+    if (usuarioToken.role === USER_ROLES.OPERADOR) {
+      return res.status(403).json({ error: "Sin acceso al módulo cultivos" });
+    }
+
+    const cultivos = await prisma.cultivo.findMany({
+      where:
+        usuarioToken.role === USER_ROLES.SUPERADMIN
+          ? { isActive: true, deletedAt: null }
+          : {
+              accountId: Number(usuarioToken.account_id),
+              isActive: true,
+              deletedAt: null,
+            },
+      orderBy: { id: "asc" },
+    });
+
+    return res.status(200).json({
+      module: "cultivos",
+      cultivos: cultivos.map((cultivo) => ({
+        id: cultivo.id,
+        nombre: cultivo.nombre,
+        descripcion: cultivo.descripcion,
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 router.post("/bot/portones/:id/abrir", authenticateBotSecret, async (req, res) => {
   const id = Number(req.params.id);
