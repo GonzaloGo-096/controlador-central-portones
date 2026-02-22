@@ -1,13 +1,13 @@
 /**
  * Misma lógica que GET /api/_prod_db_test, ejecutable por línea de comandos.
  * Uso: node scripts/run-prod-db-test.js
- * Carga .env del proyecto y usa el mismo pool (configuración DB_* o DATABASE_URL).
+ * Carga .env del proyecto y usa el mismo pool (DATABASE_URL).
  */
 
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
-const pool = require("../src/db/pool");
+const pool = require("../src/infrastructure/database/pool");
 
 function getHostPortFromDatabaseUrl(url) {
   if (!url || typeof url !== "string") return { host: null, port: null };
@@ -17,9 +17,12 @@ function getHostPortFromDatabaseUrl(url) {
 
 async function run() {
   const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL no está configurada.");
+  }
   const { host, port } = getHostPortFromDatabaseUrl(connectionString);
-  const dbHost = host || process.env.DB_HOST || "(no definido)";
-  const dbPort = port || process.env.DB_PORT || "5432";
+  const dbHost = host || "(no definido)";
+  const dbPort = port || "5432";
 
   console.log("[prod_db_test] Inicio — host:", dbHost, "| port:", dbPort, "| NODE_ENV:", process.env.NODE_ENV || "(no definido)\n");
 
@@ -37,7 +40,7 @@ async function run() {
     const tables = tablesResult.rows.map((r) => r.table_name);
 
     const counts = {};
-    for (const key of ["users", "tenants", "gates"]) {
+    for (const key of ["users", "porton_groups", "gates"]) {
       const countResult = await pool.query(`SELECT COUNT(*)::int AS c FROM public.${key}`);
       counts[key] = countResult.rows[0]?.c ?? 0;
     }

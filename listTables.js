@@ -6,11 +6,14 @@
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
-const pool = require("./src/db/pool");
+const pool = require("./src/infrastructure/database/pool");
 
 async function main() {
   const connectionString = process.env.DATABASE_URL;
-  const dbName = connectionString ? new URL(connectionString).pathname.slice(1) : process.env.DB_NAME;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL no está configurada.");
+  }
+  const dbName = new URL(connectionString).pathname.slice(1);
 
   console.log("Base de datos:", dbName || "(desde DATABASE_URL)");
   console.log("Tablas en el schema public:\n");

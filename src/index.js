@@ -1,85 +1,59 @@
-/**
- * Punto de arranque del Controlador Central de Portones.
- *
- * Responsabilidades (según README):
- * - Inicializa módulos
- * - Orquesta dependencias
- * - Sin imports circulares: FSM no conoce MQTT, MQTT recibe FSM por inyección
- */
-
 const path = require("path");
-// En Railway no cargar .env: usar solo las variables inyectadas por el panel (así DATABASE_URL no se pisa).
 if (!process.env.RAILWAY_PUBLIC_DOMAIN) {
   require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 }
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL no está definida. Configurá la variable de entorno antes de iniciar la aplicación."
+  );
+}
 
 const express = require("express");
-const { StateMachine, STATES } = require("./core/stateMachine");
-const { dispatch } = require("./core/actionDispatcher");
-const { createMqttClient } = require("./mqtt/mqttClient");
-const { createEventsRouter } = require("./api/events.controller");
-const { createTelegramCommandRouter } = require("./api/telegram.command.controller");
-const telegramRouter = require("./api/telegram.controller");
-const prodDbTestRouter = require("./api/prodDbTest");
-const { mqtt: mqttConfig } = require("./config/env");
+const { prisma } = require("./infrastructure/database/prismaClient");
+const { ensureRedisConnection, redisClient } = require("./infrastructure/cache/redisClient");
+const authRouter = require("./modules/auth/auth.controller");
+const usuariosRouter = require("./modules/usuarios/usuarios.controller");
+const gruposPortonesRouter = require("./modules/grupos_portones/grupos_portones.controller");
+const portonesRouter = require("./modules/portones/portones.controller");
+const eventosPortonRouter = require("./modules/eventos_porton/eventos_porton.controller");
+const cultivosRouter = require("./modules/cultivos/cultivos.controller");
+const telegramRouter = require("./infrastructure/telegram/telegram.controller");
 
-console.log("🚀 Controlador Central de Portones iniciado");
-
-// Validar configuración antes de conectar
-if (!mqttConfig.brokerUrl) {
-  console.error("\n❌ MQTT_BROKER_URL no está configurado.");
-  console.error("   Creá un archivo .env con:");
-  console.error("   MQTT_BROKER_URL=mqtts://tu-cluster.s1.eu.hivemq.cloud:8883");
-  console.error("   MQTT_USERNAME=tu_usuario");
-  console.error("   MQTT_PASSWORD=tu_contraseña\n");
-  process.exit(1);
-}
-
-if (mqttConfig.brokerUrl.startsWith("mqtts://") && (!mqttConfig.username || !mqttConfig.password)) {
-  console.error("\n❌ HiveMQ Cloud requiere MQTT_USERNAME y MQTT_PASSWORD en .env\n");
-  process.exit(1);
-}
-
-// Registro de FSM por portón (un estado lógico por portonId)
-const stateMachineRegistry = new Map();
-
-function getStateMachine(portonId) {
-  if (!stateMachineRegistry.has(portonId)) {
-    stateMachineRegistry.set(portonId, new StateMachine(STATES.CLOSED));
-    console.log(`📍 [${portonId}] FSM creada, estado inicial: CLOSED`);
-  }
-  return stateMachineRegistry.get(portonId);
-}
-
-const onStateChange = (portonId, result) => dispatch(portonId, result, mqttClient);
-
-const mqttClient = createMqttClient(mqttConfig, getStateMachine, onStateChange);
-
-try {
-  mqttClient.connect();
-} catch (err) {
-  console.error("❌ Error al conectar MQTT:", err.message);
-  process.exit(1);
-}
-
-// Servidor HTTP con Express
 const app = express();
 app.use(express.json());
-app.get("/api/ping", (req, res) => res.json({ ok: true, service: "controlador-portones" }));
-app.use("/api", prodDbTestRouter);
-app.use("/api", createEventsRouter(getStateMachine, onStateChange));
-app.use("/api", createTelegramCommandRouter(getStateMachine, onStateChange));
-app.use("/api", telegramRouter);
+
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
+app.use("/api/auth", authRouter);
+app.use("/api/usuarios", usuariosRouter);
+app.use("/api/grupos-portones", gruposPortonesRouter);
+app.use("/api/portones", portonesRouter);
+app.use("/api/eventos-porton", eventosPortonRouter);
+app.use("/api/cultivos", cultivosRouter);
+app.use("/api/telegram", telegramRouter);
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`🌐 HTTP API escuchando en puerto ${port}`);
-  console.log(`   POST /api/events - Enviar evento { portonId, event, timestamp? }`);
+const server = app.listen(port, async () => {
+  console.log(`🌐 API base escuchando en puerto ${port}`);
+  try {
+    await ensureRedisConnection();
+  } catch (err) {
+    console.warn("[startup] Redis no disponible, se continuará sin cache:", err.message || err);
+  }
 });
 
-// Graceful shutdown (Ctrl+C en Windows)
-process.on("SIGINT", () => {
-  mqttClient.disconnect();
+async function gracefulShutdown() {
+  console.log("🛑 Cerrando servicios...");
+  server.close();
+  await Promise.allSettled([
+    prisma.$disconnect(),
+    redisClient.isOpen ? redisClient.quit() : Promise.resolve(),
+  ]);
   console.log("👋 Servidor detenido");
   process.exit(0);
-});
+}
+
+process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", gracefulShutdown);

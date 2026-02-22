@@ -8,7 +8,7 @@ const fs = require("fs");
 
 const envPath = path.join(__dirname, ".env");
 const loaded = require("dotenv").config({ path: envPath });
-const pool = require("./src/db/pool");
+const pool = require("./src/infrastructure/database/pool");
 
 async function main() {
   console.log("Probando conexión a la base de datos...");
@@ -21,20 +21,16 @@ async function main() {
     process.exit(1);
   }
 
-  if (!process.env.DB_HOST || !process.env.DB_NAME) {
-    console.error("  ❌ En tu .env faltan las variables de PostgreSQL.");
-    console.error("     Necesitás: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT");
-    console.error("     Ejemplo en .env:");
-    console.error("       DB_HOST=localhost");
-    console.error("       DB_USER=postgres");
-    console.error("       DB_PASSWORD=tu_password");
-    console.error("       DB_NAME=controlador_portones");
-    console.error("       DB_PORT=5432\n");
+  if (!process.env.DATABASE_URL) {
+    console.error("  ❌ En tu .env falta DATABASE_URL.");
+    console.error("     Ejemplo:");
+    console.error("       DATABASE_URL=postgresql://postgres:password@localhost:5432/portones_db\n");
     process.exit(1);
   }
 
-  console.log("  Host:", process.env.DB_HOST);
-  console.log("  DB:  ", process.env.DB_NAME);
+  const parsed = new URL(process.env.DATABASE_URL);
+  console.log("  Host:", parsed.hostname);
+  console.log("  DB:  ", parsed.pathname.replace("/", ""));
   console.log("");
 
   try {
@@ -45,12 +41,12 @@ async function main() {
       SELECT table_name
       FROM information_schema.tables
       WHERE table_schema = 'public'
-      AND table_name IN ('users', 'tenants', 'gates')
+      AND table_name IN ('users', 'porton_groups', 'gates')
       ORDER BY table_name
     `);
     const names = tables.rows.map((r) => r.table_name);
     if (names.length === 3) {
-      console.log("✅ Tablas esperadas presentes: users, tenants, gates\n");
+      console.log("✅ Tablas esperadas presentes: users, porton_groups, gates\n");
     } else {
       console.log("⚠️  Tablas encontradas:", names.length ? names.join(", ") : "ninguna");
       console.log("   (Si faltan, creá las tablas para que el backend funcione con DB real)\n");
