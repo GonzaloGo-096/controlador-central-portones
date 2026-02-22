@@ -1,3 +1,4 @@
+/src/generated/prisma
 # Dependencies
 node_modules/
 
@@ -42,4 +43,3 @@ coverage/
 # Misc
 *.local
 
-/src/generated/prisma

@@ -1,6 +1,6 @@
 const path = require("path");
 const { PrismaPg } = require("@prisma/adapter-pg");
-const { PrismaClient } = require("../../generated/prisma");
+const { PrismaClient } = require("@prisma/client");
 
 if (!process.env.DATABASE_URL && !process.env.RAILWAY_PUBLIC_DOMAIN) {
   require("dotenv").config({ path: path.join(__dirname, "..", "..", "..", ".env") });

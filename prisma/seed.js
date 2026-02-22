@@ -2,7 +2,7 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 const { PrismaPg } = require("@prisma/adapter-pg");
-const { PrismaClient } = require("../src/generated/prisma");
+const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 
 function validateEnv() {

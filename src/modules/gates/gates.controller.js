@@ -1,5 +1,5 @@
 const express = require("express");
-const { Prisma } = require("../../generated/prisma");
+const { Prisma } = require("@prisma/client");
 const service = require("./gates.service");
 const { toJSONSafe } = require("../../shared/utils/serialization");
 

@@ -29,6 +29,8 @@
     "node": ">=20.19.0"
   },
   "scripts": {
+    "build": "prisma generate",
+    "postinstall": "prisma generate",
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "prisma:seed": "node prisma/seed.js",
@@ -43,10 +45,10 @@
     "jsonwebtoken": "^9.0.3",
     "mqtt": "^5.15.0",
     "pg": "^8.18.0",
+    "prisma": "^7.4.1",
     "redis": "^5.11.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0",
-    "prisma": "^7.4.1"
+    "nodemon": "^3.1.0"
   }
 }
