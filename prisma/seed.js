@@ -34,7 +34,7 @@ async function runSeed() {
 
       const account = await tx.account.create({
         data: {
-          name: "Account Principal",
+          name: "Cuenta Familia Gomez Omil",
           isActive: true,
         },
       });
@@ -42,8 +42,8 @@ async function runSeed() {
       const portonGroup = await tx.portonGroup.create({
         data: {
           accountId: account.id,
-          name: "PortonGroup Central",
-          description: "Unidad principal",
+          name: "Familia - Portones",
+          description: "Portones principales de la familia",
           isActive: true,
         },
       });
@@ -51,31 +51,9 @@ async function runSeed() {
       const user = await tx.user.create({
         data: {
           accountId: account.id,
-          fullName: "Superadministrador Base",
-          email: "superadmin@local.test",
+          fullName: "Gonzalo Gomez Omil",
+          email: "gonzalo.gomezomil@gmail.com",
           role: "superadministrador",
-          permissionsVersion: 1,
-          isActive: true,
-        },
-      });
-
-      const adminCuenta = await tx.user.create({
-        data: {
-          accountId: account.id,
-          fullName: "Administrador Cuenta",
-          email: "admin_cuenta@local.test",
-          role: "administrador_cuenta",
-          permissionsVersion: 1,
-          isActive: true,
-        },
-      });
-
-      const operador = await tx.user.create({
-        data: {
-          accountId: account.id,
-          fullName: "Operador Demo",
-          email: "operador@local.test",
-          role: "operador",
           permissionsVersion: 1,
           isActive: true,
         },
@@ -85,7 +63,7 @@ async function runSeed() {
         data: {
           userId: user.id,
           type: "PASSWORD",
-          identifier: "superadmin@local.test",
+          identifier: "gonzalo.gomezomil@gmail.com",
           secretHash: adminPasswordHash,
           isActive: true,
         },
@@ -95,48 +73,15 @@ async function runSeed() {
         data: {
           userId: user.id,
           type: "TELEGRAM",
-          identifier: "123456789012345",
+          identifier: "1837694465",
           secretHash: null,
           isActive: true,
         },
       });
 
-      await tx.userCredential.createMany({
-        data: [
-          {
-            userId: adminCuenta.id,
-            type: "PASSWORD",
-            identifier: "admin_cuenta@local.test",
-            secretHash: adminPasswordHash,
-            isActive: true,
-          },
-          {
-            userId: adminCuenta.id,
-            type: "TELEGRAM",
-            identifier: "223456789012345",
-            secretHash: null,
-            isActive: true,
-          },
-          {
-            userId: operador.id,
-            type: "PASSWORD",
-            identifier: "operador@local.test",
-            secretHash: adminPasswordHash,
-            isActive: true,
-          },
-          {
-            userId: operador.id,
-            type: "TELEGRAM",
-            identifier: "323456789012345",
-            secretHash: null,
-            isActive: true,
-          },
-        ],
-      });
-
       const userPortonGroup = await tx.userPortonGroup.create({
         data: {
-          userId: adminCuenta.id,
+          userId: user.id,
           portonGroupId: portonGroup.id,
           role: "admin",
           isActive: true,
@@ -146,18 +91,18 @@ async function runSeed() {
       const gate = await tx.gate.create({
         data: {
           portonGroupId: portonGroup.id,
-          name: "GATE-001",
+          name: "Satlta 608",
           type: "vehicular",
-          identifier: "GATE-001",
-          topicMqtt: "portones/gate001",
-          location: "Entrada principal",
+          identifier: "SATLTA-608",
+          topicMqtt: "portones/satlta-608",
+          location: "Satlta 608",
           isActive: true,
         },
       });
 
       const userGate = await tx.userGate.create({
         data: {
-          userId: operador.id,
+          userId: user.id,
           gateId: gate.id,
           permission: "open",
           isActive: true,
@@ -175,7 +120,7 @@ async function runSeed() {
 
       const eventoPorton = await tx.eventoPorton.create({
         data: {
-          usuarioId: operador.id,
+          usuarioId: user.id,
           cuentaId: account.id,
           portonId: gate.id,
           grupoPortonesId: portonGroup.id,
@@ -188,8 +133,6 @@ async function runSeed() {
         accountId: account.id,
         portonGroupId: portonGroup.id,
         superadminId: user.id,
-        adminCuentaId: adminCuenta.id,
-        operadorId: operador.id,
         passwordCredentialId: passwordCredential.id,
         telegramCredentialId: telegramCredential.id,
         userPortonGroupId: userPortonGroup.id,
