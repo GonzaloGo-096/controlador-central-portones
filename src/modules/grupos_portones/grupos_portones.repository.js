@@ -1,9 +1,20 @@
 const { prisma } = require("../../infrastructure/database/prismaClient");
 const { isSuperadmin, requireAccountId } = require("../../shared/utils/scope");
+const { USER_ROLES } = require("../../shared/types/auth.types");
 
 function scope(usuarioToken) {
   if (isSuperadmin(usuarioToken)) return {};
-  return { accountId: requireAccountId(usuarioToken) };
+  const accountId = requireAccountId(usuarioToken);
+  const isOperator = usuarioToken?.role === USER_ROLES.OPERADOR;
+  const mid = usuarioToken?.membershipId ?? usuarioToken?.membership_id;
+
+  if (isOperator && mid) {
+    return {
+      accountId,
+      membershipPortonGroups: { some: { membershipId: mid } },
+    };
+  }
+  return { accountId };
 }
 
 function findAllGruposPortones(usuarioToken) {

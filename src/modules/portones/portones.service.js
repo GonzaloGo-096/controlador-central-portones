@@ -65,7 +65,7 @@ async function abrirPortonConDebounce({ portonId, usuarioToken, canal }) {
     : requireAccountId(usuarioToken);
 
   await eventosRepository.createEventoPorton({
-    usuarioId: Number(usuarioToken.sub),
+    identityId: String(usuarioToken.sub),
     cuentaId,
     portonId: porton.id,
     grupoPortonesId: porton.portonGroupId,

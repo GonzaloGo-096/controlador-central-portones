@@ -8,7 +8,8 @@ function signAccessToken(user) {
     sub: user.id,
     account_id: user.accountId,
     role: user.role,
-    permissions_version: user.permissionsVersion,
+    permissions_version: user.permissionsVersion ?? 1,
+    ...(user.membershipId ? { membership_id: user.membershipId } : {}),
   };
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,

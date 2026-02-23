@@ -6,6 +6,106 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── Nuevo modelo Identity + Membership ─────────────────────────────────────
+
+model Identity {
+  id        String   @id @default(cuid())
+  fullName  String?  @map("full_name")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  credentials        Credential[]
+  accountMemberships AccountMembership[]
+  gateEvents         GateEvent[]
+  eventosPorton      EventoPorton[]
+
+  @@map("identities")
+}
+
+model Credential {
+  id         Int            @id @default(autoincrement())
+  identityId String         @map("identity_id")
+  type       CredentialType
+  identifier String
+  secretHash String?        @map("secret_hash")
+  isActive   Boolean        @default(true) @map("is_active")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  identity   Identity       @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@unique([type, identifier], map: "uq_credentials_type_identifier")
+  @@index([identityId], map: "idx_credentials_identity_id")
+  @@map("credentials")
+}
+
+model AccountMembership {
+  id         Int                @id @default(autoincrement())
+  identityId String             @map("identity_id")
+  accountId  Int                @map("account_id")
+  role       MembershipRole     @default(OPERATOR)
+  status     MembershipStatus   @default(ACTIVE)
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+
+  identity   Identity           @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  account    Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  portonGroups MembershipPortonGroup[]
+  gatePermissions MembershipGatePermission[]
+
+  @@unique([identityId, accountId], map: "uq_account_membership_identity_account")
+  @@index([accountId], map: "idx_account_memberships_account_id")
+  @@index([identityId], map: "idx_account_memberships_identity_id")
+  @@map("account_memberships")
+}
+
+model MembershipPortonGroup {
+  id             Int        @id @default(autoincrement())
+  membershipId   Int        @map("membership_id")
+  portonGroupId  Int        @map("porton_group_id")
+  roleInGroup    PortonGroupRole? @default(operator) @map("role_in_group")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  membership     AccountMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  portonGroup    PortonGroup       @relation(fields: [portonGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, portonGroupId], map: "uq_membership_porton_group")
+  @@index([portonGroupId], map: "idx_membership_porton_groups_porton_group_id")
+  @@map("membership_porton_groups")
+}
+
+model MembershipGatePermission {
+  id           Int            @id @default(autoincrement())
+  membershipId Int            @map("membership_id")
+  gateId       Int            @map("gate_id")
+  permission   GatePermission @default(open)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  membership   AccountMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  gate         Gate              @relation(fields: [gateId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, gateId], map: "uq_membership_gate_permission")
+  @@index([gateId], map: "idx_membership_gate_permissions_gate_id")
+  @@map("membership_gate_permissions")
+}
+
+enum MembershipRole {
+  SUPERADMIN
+  ADMIN
+  OPERATOR
+
+  @@map("MembershipRole")
+}
+
+enum MembershipStatus {
+  ACTIVE
+  SUSPENDED
+
+  @@map("MembershipStatus")
+}
+
+// ─── Modelos existentes (Account, PortonGroup, Gate, etc.) ───────────────────
+
 model Account {
   id        Int      @id @default(autoincrement())
   name      String
@@ -13,35 +113,13 @@ model Account {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
-  users     User[]
-  portonGroups PortonGroup[]
-  eventosPorton EventoPorton[]
-  cultivos Cultivo[]
+
+  accountMemberships AccountMembership[]
+  portonGroups       PortonGroup[]
+  eventosPorton      EventoPorton[]
+  cultivos           Cultivo[]
 
   @@map("accounts")
-}
-
-model User {
-  id          Int          @id @default(autoincrement())
-  accountId   Int          @map("account_id")
-  fullName    String       @map("full_name")
-  email       String?      @unique
-  role        UserRole     @default(administrador_cuenta)
-  permissionsVersion Int   @default(1) @map("permissions_version")
-  isActive    Boolean      @default(true) @map("is_active")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
-  deletedAt   DateTime?    @map("deleted_at")
-  account     Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  userPortonGroups UserPortonGroup[]
-  userGates   UserGate[]
-  gateEvents  GateEvent[]
-  eventosPorton EventoPorton[]
-  credentials UserCredential[]
-
-  @@index([accountId], map: "idx_users_account_id")
-  @@index([permissionsVersion], map: "idx_users_permissions_version")
-  @@map("users")
 }
 
 model PortonGroup {
@@ -53,9 +131,10 @@ model PortonGroup {
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
   deletedAt   DateTime?    @map("deleted_at")
+
   account     Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
   gates       Gate[]
-  userPortonGroups UserPortonGroup[]
+  membershipPortonGroups MembershipPortonGroup[]
   eventosPorton EventoPorton[]
 
   @@index([accountId], map: "idx_porton_groups_account_id")
@@ -63,100 +142,54 @@ model PortonGroup {
 }
 
 model Gate {
-  id          Int        @id @default(autoincrement())
-  portonGroupId Int      @map("porton_group_id")
-  name        String
-  type        String
-  identifier  String?    @unique
-  topicMqtt   String?    @map("topic_mqtt")
-  location    String?
-  state       GateState  @default(closed)
-  isActive    Boolean    @default(true) @map("is_active")
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
-  deletedAt   DateTime?  @map("deleted_at")
-  portonGroup PortonGroup @relation(fields: [portonGroupId], references: [id], onDelete: Restrict)
-  userGates   UserGate[]
-  gateEvents  GateEvent[]
-  eventosPorton EventoPorton[]
+  id             Int        @id @default(autoincrement())
+  portonGroupId  Int        @map("porton_group_id")
+  name           String
+  type           String
+  identifier     String?    @unique
+  topicMqtt      String?    @map("topic_mqtt")
+  location       String?
+  state          GateState  @default(closed)
+  isActive       Boolean    @default(true) @map("is_active")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  deletedAt      DateTime?  @map("deleted_at")
+
+  portonGroup    PortonGroup @relation(fields: [portonGroupId], references: [id], onDelete: Restrict)
+  membershipGatePermissions MembershipGatePermission[]
+  gateEvents     GateEvent[]
+  eventosPorton  EventoPorton[]
 
   @@index([portonGroupId], map: "idx_gates_porton_group_id")
   @@map("gates")
 }
 
-model UserPortonGroup {
-  id        Int        @id @default(autoincrement())
-  userId    Int        @map("user_id")
-  portonGroupId Int    @map("porton_group_id")
-  role      PortonGroupRole @default(operator)
-  isActive  Boolean    @default(true) @map("is_active")
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
-  deletedAt DateTime?  @map("deleted_at")
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  portonGroup PortonGroup @relation(fields: [portonGroupId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, portonGroupId], map: "uq_user_porton_group")
-  @@index([portonGroupId], map: "idx_user_porton_groups_porton_group_id")
-  @@map("user_porton_groups")
-}
-
-model UserGate {
-  id         Int             @id @default(autoincrement())
-  userId     Int             @map("user_id")
-  gateId     Int             @map("gate_id")
-  permission GatePermission  @default(open)
-  isActive   Boolean         @default(true) @map("is_active")
-  createdAt  DateTime        @default(now()) @map("created_at")
-  updatedAt  DateTime        @updatedAt @map("updated_at")
-  deletedAt  DateTime?       @map("deleted_at")
-  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gate       Gate            @relation(fields: [gateId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, gateId], map: "uq_user_gate")
-  @@index([gateId], map: "idx_user_gates_gate_id")
-  @@map("user_gates")
-}
-
 model GateEvent {
-  id        Int        @id @default(autoincrement())
-  gateId    Int        @map("gate_id")
-  userId    Int?       @map("user_id")
-  action    GateAction
-  createdAt DateTime   @default(now()) @map("created_at")
-  gate      Gate       @relation(fields: [gateId], references: [id], onDelete: Cascade)
-  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id         Int        @id @default(autoincrement())
+  gateId     Int        @map("gate_id")
+  identityId String?    @map("identity_id")
+  action     GateAction
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  gate       Gate       @relation(fields: [gateId], references: [id], onDelete: Cascade)
+  identity   Identity?  @relation(fields: [identityId], references: [id], onDelete: SetNull)
 
   @@index([gateId], map: "idx_gate_events_gate_id")
-  @@index([userId], map: "idx_gate_events_user_id")
+  @@index([identityId], map: "idx_gate_events_identity_id")
   @@map("gate_events")
-}
-
-model UserCredential {
-  id         Int           @id @default(autoincrement())
-  userId     Int           @map("user_id")
-  type       CredentialType
-  identifier String
-  secretHash String?       @map("secret_hash")
-  isActive   Boolean       @default(true) @map("is_active")
-  createdAt  DateTime      @default(now()) @map("created_at")
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([type, identifier], map: "uq_user_credentials_type_identifier")
-  @@index([userId], map: "idx_user_credentials_user_id")
-  @@map("user_credentials")
 }
 
 model EventoPorton {
   id              Int        @id @default(autoincrement())
-  usuarioId       Int?       @map("usuario_id")
+  identityId      String?    @map("identity_id")
   cuentaId        Int        @map("cuenta_id")
   portonId        Int        @map("porton_id")
   grupoPortonesId Int        @map("grupo_portones_id")
   accion          String
   canal           String
   fechaHora       DateTime   @default(now()) @map("fecha_hora")
-  usuario         User?      @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  identity        Identity?  @relation(fields: [identityId], references: [id], onDelete: SetNull)
   cuenta          Account    @relation(fields: [cuentaId], references: [id], onDelete: Restrict)
   porton          Gate       @relation(fields: [portonId], references: [id], onDelete: Restrict)
   grupoPortones   PortonGroup @relation(fields: [grupoPortonesId], references: [id], onDelete: Restrict)
@@ -177,10 +210,18 @@ model Cultivo {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
+
   account     Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
 
   @@index([accountId], map: "idx_cultivos_account_id")
   @@map("cultivos")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum CredentialType {
+  PASSWORD
+  TELEGRAM
 }
 
 enum GateState {
@@ -213,15 +254,4 @@ enum GatePermission {
   open
   close
   stop
-}
-
-enum UserRole {
-  superadministrador
-  administrador_cuenta
-  operador
-}
-
-enum CredentialType {
-  PASSWORD
-  TELEGRAM
 }

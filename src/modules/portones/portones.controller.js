@@ -79,35 +79,10 @@ router.delete("/:id", requireRoles(ADMIN_ACCESS_ROLES), async (req, res) => {
   return res.status(200).json(toJSONSafe(deleted));
 });
 
-router.post(
-  "/:id/abrir",
-  requireRoles([USER_ROLES.SUPERADMIN, USER_ROLES.ADMIN_CUENTA, USER_ROLES.OPERADOR]),
-  requireGateAccess((req) => req.params.id, { permission: "open" }),
-  async (req, res) => {
-    const id = Number(req.params.id);
-    if (Number.isNaN(id)) return res.status(400).json({ error: "id inválido" });
-
-    try {
-      const canal = String(req.body?.canal || "web");
-      const result = await service.abrirPortonConDebounce({
-        portonId: id,
-        usuarioToken: req.user,
-        canal,
-      });
-      if (result.notFound) return res.status(404).json({ error: "Portón no encontrado" });
-      if (result.debounced) {
-        return res.status(429).json({ error: "Comando bloqueado por debounce" });
-      }
-
-      return res.status(200).json({
-        ok: true,
-        mensaje: "Comando de apertura enviado (press)",
-        accountId: isSuperadmin(req.user) ? undefined : requireAccountId(req.user),
-      });
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
-    }
-  }
-);
+router.post("/:id/abrir", (req, res) => {
+  return res.status(501).json({
+    error: "Apertura de portón aún no implementada (MQTT pendiente)",
+  });
+});
 
 module.exports = router;

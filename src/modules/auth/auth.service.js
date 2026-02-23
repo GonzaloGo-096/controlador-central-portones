@@ -1,8 +1,8 @@
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const repository = require("./auth.repository");
+const identityRepository = require("../identity/identity.repository");
 const { signAccessToken } = require("../../shared/utils/jwt");
-const { CREDENTIAL_TYPES, USER_ROLES } = require("../../shared/types/auth.types");
 
 function unauthorized(message) {
   const err = new Error(message);
@@ -18,11 +18,11 @@ function forbidden(message) {
 
 async function loginWeb({ identifier, password }) {
   const credential = await repository.findCredentialByTypeAndIdentifier(
-    CREDENTIAL_TYPES.PASSWORD,
+    "PASSWORD",
     String(identifier)
   );
 
-  if (!credential || !credential.isActive || !credential.user || !credential.user.isActive) {
+  if (!credential || !credential.isActive || !credential.identity) {
     throw unauthorized("Credenciales inválidas");
   }
   if (!credential.secretHash) {
@@ -34,18 +34,37 @@ async function loginWeb({ identifier, password }) {
     throw unauthorized("Credenciales inválidas");
   }
 
-  if (credential.user.role === USER_ROLES.OPERADOR) {
+  const memberships = await identityRepository.getMembershipsWithScopes(credential.identityId);
+  const activeMemberships = memberships.filter((m) => m.status === "ACTIVE");
+  if (activeMemberships.length === 0) {
+    throw unauthorized("Credenciales inválidas");
+  }
+
+  const operadorMemberships = activeMemberships.filter((m) => m.role === "OPERATOR");
+  if (operadorMemberships.length === activeMemberships.length) {
     throw forbidden("operador solo puede iniciar por Telegram");
   }
 
-  const accessToken = signAccessToken(credential.user);
+  const membership = activeMemberships.find((m) => m.role !== "OPERATOR") || activeMemberships[0];
+
+  const roleMap = { SUPERADMIN: "superadministrador", ADMIN: "administrador_cuenta", OPERATOR: "operador" };
+  const tokenPayload = {
+    id: credential.identityId,
+    accountId: membership.accountId,
+    role: roleMap[membership.role] || membership.role,
+    membershipId: membership.id,
+    permissionsVersion: 1,
+  };
+
+  const accessToken = signAccessToken(tokenPayload);
   return {
     accessToken,
     user: {
-      id: credential.user.id,
-      accountId: credential.user.accountId,
-      role: credential.user.role,
-      permissionsVersion: credential.user.permissionsVersion,
+      id: credential.identityId,
+      accountId: membership.accountId,
+      role: roleMap[membership.role] || membership.role,
+      membershipId: membership.id,
+      permissionsVersion: 1,
     },
   };
 }
@@ -54,23 +73,38 @@ async function loginTelegram({ telegramAuth, telegramId }) {
   validateTelegramAuth(telegramAuth);
 
   const identifier = String(telegramId ?? telegramAuth.id);
-  const credential = await repository.findCredentialByTypeAndIdentifier(
-    CREDENTIAL_TYPES.TELEGRAM,
-    identifier
-  );
+  const credential = await repository.findCredentialByTypeAndIdentifier("TELEGRAM", identifier);
 
-  if (!credential || !credential.isActive || !credential.user || !credential.user.isActive) {
+  if (!credential || !credential.isActive || !credential.identity) {
     throw unauthorized("Credenciales inválidas");
   }
 
-  const accessToken = signAccessToken(credential.user);
+  const memberships = await identityRepository.getMembershipsWithScopes(credential.identityId);
+  const activeMemberships = memberships.filter((m) => m.status === "ACTIVE");
+  if (activeMemberships.length === 0) {
+    throw unauthorized("Credenciales inválidas");
+  }
+
+  const membership = activeMemberships[0];
+  const roleMap = { SUPERADMIN: "superadministrador", ADMIN: "administrador_cuenta", OPERATOR: "operador" };
+
+  const tokenPayload = {
+    id: credential.identityId,
+    accountId: membership.accountId,
+    role: roleMap[membership.role] || membership.role,
+    membershipId: membership.id,
+    permissionsVersion: 1,
+  };
+
+  const accessToken = signAccessToken(tokenPayload);
   return {
     accessToken,
     user: {
-      id: credential.user.id,
-      accountId: credential.user.accountId,
-      role: credential.user.role,
-      permissionsVersion: credential.user.permissionsVersion,
+      id: credential.identityId,
+      accountId: membership.accountId,
+      role: roleMap[membership.role] || membership.role,
+      membershipId: membership.id,
+      permissionsVersion: 1,
     },
   };
 }
@@ -105,7 +139,6 @@ function validateTelegramAuth(telegramAuth) {
     throw unauthorized("Firma Telegram inválida");
   }
 
-  // Telegram recomienda rechazar auth muy antigua para evitar replay.
   const authDate = Number(telegramAuth.auth_date);
   if (!Number.isNaN(authDate)) {
     const now = Math.floor(Date.now() / 1000);

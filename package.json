@@ -34,7 +34,8 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "prisma:seed": "node prisma/seed.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test src/modules/identity/__tests__/identity.telegram.service.test.js",
+    "test:portones-flow": "node scripts/test_telegram_portones_flow.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.1",

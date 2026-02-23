@@ -1,3 +1,7 @@
+/**
+ * Seed para modelo Identity + AccountMembership.
+ */
+
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
@@ -20,15 +24,14 @@ async function runSeed() {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // Seed determinístico: limpia primera capa y vuelve a crearla.
       await tx.eventoPorton.deleteMany();
-      await tx.gateEvent.deleteMany();
-      await tx.userGate.deleteMany();
-      await tx.userPortonGroup.deleteMany();
-      await tx.userCredential.deleteMany();
+      await tx.membershipGatePermission.deleteMany();
+      await tx.membershipPortonGroup.deleteMany();
+      await tx.credential.deleteMany();
+      await tx.accountMembership.deleteMany();
+      await tx.identity.deleteMany();
       await tx.gate.deleteMany();
       await tx.cultivo.deleteMany();
-      await tx.user.deleteMany();
       await tx.portonGroup.deleteMany();
       await tx.account.deleteMany();
 
@@ -48,20 +51,13 @@ async function runSeed() {
         },
       });
 
-      const user = await tx.user.create({
-        data: {
-          accountId: account.id,
-          fullName: "Gonzalo Gomez Omil",
-          email: "gonzalo.gomezomil@gmail.com",
-          role: "superadministrador",
-          permissionsVersion: 1,
-          isActive: true,
-        },
+      const identity = await tx.identity.create({
+        data: { fullName: "Gonzalo Gomez Omil" },
       });
 
-      const passwordCredential = await tx.userCredential.create({
+      await tx.credential.create({
         data: {
-          userId: user.id,
+          identityId: identity.id,
           type: "PASSWORD",
           identifier: "gonzalo.gomezomil@gmail.com",
           secretHash: adminPasswordHash,
@@ -69,9 +65,9 @@ async function runSeed() {
         },
       });
 
-      const telegramCredential = await tx.userCredential.create({
+      await tx.credential.create({
         data: {
-          userId: user.id,
+          identityId: identity.id,
           type: "TELEGRAM",
           identifier: "1837694465",
           secretHash: null,
@@ -79,12 +75,20 @@ async function runSeed() {
         },
       });
 
-      const userPortonGroup = await tx.userPortonGroup.create({
+      const membership = await tx.accountMembership.create({
         data: {
-          userId: user.id,
+          identityId: identity.id,
+          accountId: account.id,
+          role: "SUPERADMIN",
+          status: "ACTIVE",
+        },
+      });
+
+      await tx.membershipPortonGroup.create({
+        data: {
+          membershipId: membership.id,
           portonGroupId: portonGroup.id,
-          role: "admin",
-          isActive: true,
+          roleInGroup: "admin",
         },
       });
 
@@ -100,12 +104,11 @@ async function runSeed() {
         },
       });
 
-      const userGate = await tx.userGate.create({
+      await tx.membershipGatePermission.create({
         data: {
-          userId: user.id,
+          membershipId: membership.id,
           gateId: gate.id,
           permission: "open",
-          isActive: true,
         },
       });
 
@@ -118,9 +121,9 @@ async function runSeed() {
         },
       });
 
-      const eventoPorton = await tx.eventoPorton.create({
+      await tx.eventoPorton.create({
         data: {
-          usuarioId: user.id,
+          identityId: identity.id,
           cuentaId: account.id,
           portonId: gate.id,
           grupoPortonesId: portonGroup.id,
@@ -132,20 +135,15 @@ async function runSeed() {
       return {
         accountId: account.id,
         portonGroupId: portonGroup.id,
-        superadminId: user.id,
-        passwordCredentialId: passwordCredential.id,
-        telegramCredentialId: telegramCredential.id,
-        userPortonGroupId: userPortonGroup.id,
+        identityId: identity.id,
+        membershipId: membership.id,
         gateId: gate.id,
-        userGateId: userGate.id,
         cultivoId: cultivo.id,
-        eventoPortonId: eventoPorton.id,
       };
     }, { timeout: 30000, maxWait: 10000 });
 
     console.log("SEED_OK=true");
     console.log("SEED_IDS=" + JSON.stringify(result));
-    console.log("SEED_RELATIONS_OK=true");
   } finally {
     await prisma.$disconnect();
   }

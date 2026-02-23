@@ -27,7 +27,7 @@ router.post("/", requireRoles(ADMIN_ACCESS_ROLES), async (req, res) => {
   try {
     const body = req.body || {};
     const created = await service.createEventoPorton({
-      usuarioId: body.usuarioId != null ? Number(body.usuarioId) : null,
+      identityId: body.identityId != null ? String(body.identityId) : null,
       cuentaId: isSuperadmin(req.user)
         ? Number(body.cuentaId)
         : requireAccountId(req.user),
@@ -51,7 +51,7 @@ router.put("/:id", requireRoles(ADMIN_ACCESS_ROLES), async (req, res) => {
   if (Number.isNaN(id)) return res.status(400).json({ error: "id inválido" });
   const body = req.body || {};
   const payload = {};
-  if (body.usuarioId != null) payload.usuarioId = Number(body.usuarioId);
+  if (body.identityId != null) payload.identityId = String(body.identityId);
   if (isSuperadmin(req.user) && body.cuentaId != null) payload.cuentaId = Number(body.cuentaId);
   if (body.portonId != null) payload.portonId = Number(body.portonId);
   if (body.grupoPortonesId != null) payload.grupoPortonesId = Number(body.grupoPortonesId);

@@ -24,7 +24,7 @@ function requireGateAccess(gateIdResolver, options = {}) {
 
     const accountId = requireAccountId(req.user);
     const access = await authRepository.hasGateAccessByAccount(
-      Number(req.user.sub),
+      String(req.user.sub),
       gateIdNum,
       accountId,
       permission

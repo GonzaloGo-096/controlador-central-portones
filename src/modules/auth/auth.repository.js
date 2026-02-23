@@ -1,55 +1,72 @@
-const { prisma } = require("../../infrastructure/database/prismaClient");
+/**
+ * Auth repository - usa Identity/Credential (modelo nuevo).
+ */
+
+const identityRepository = require("../identity/identity.repository");
 
 function findCredentialByTypeAndIdentifier(type, identifier) {
-  return prisma.userCredential.findUnique({
+  return identityRepository.findCredentialByTypeAndIdentifier(type, identifier);
+}
+
+async function hasGateAccessByMembership(membershipId, gateId, accountId, requiredPermission) {
+  const { prisma } = require("../../infrastructure/database/prismaClient");
+  const perm = await prisma.membershipGatePermission.findFirst({
     where: {
-      type_identifier: {
-        type,
-        identifier,
-      },
+      membershipId,
+      gateId,
+      permission: requiredPermission || "open",
+    },
+    include: { gate: { include: { portonGroup: true } } },
+  });
+  return !!perm?.gate && perm.gate.portonGroup?.accountId === accountId;
+}
+
+async function hasGateAccessByAccount(identityId, gateId, accountId, requiredPermission) {
+  const { prisma } = require("../../infrastructure/database/prismaClient");
+  const membership = await prisma.accountMembership.findFirst({
+    where: {
+      identityId,
+      accountId,
+      status: "ACTIVE",
     },
     include: {
-      user: true,
+      portonGroups: { include: { portonGroup: true } },
+      gatePermissions: { include: { gate: true } },
     },
   });
-}
+  if (!membership) return null;
 
-function hasGateAccess(userId, gateId) {
-  return prisma.userGate.findFirst({
+  if (membership.role === "SUPERADMIN" || membership.role === "ADMIN") {
+    const gate = await prisma.gate.findFirst({
+      where: { id: gateId, isActive: true, deletedAt: null },
+      include: { portonGroup: { select: { accountId: true } } },
+    });
+    return !!gate && gate.portonGroup.accountId === accountId;
+  }
+
+  const hasDirect = await prisma.membershipGatePermission.findFirst({
     where: {
-      userId,
+      membershipId: membership.id,
       gateId,
+      permission: requiredPermission || "open",
+    },
+  });
+  if (hasDirect) return true;
+
+  const groupIds = membership.portonGroups.map((g) => g.portonGroupId);
+  const gate = await prisma.gate.findFirst({
+    where: {
+      id: gateId,
+      portonGroupId: { in: groupIds },
       isActive: true,
       deletedAt: null,
     },
-    select: { id: true },
   });
-}
-
-function hasGateAccessByAccount(userId, gateId, accountId, requiredPermission) {
-  return prisma.userGate.findFirst({
-    where: {
-      userId,
-      gateId,
-      isActive: true,
-      deletedAt: null,
-      ...(requiredPermission ? { permission: requiredPermission } : {}),
-      gate: {
-        isActive: true,
-        deletedAt: null,
-        portonGroup: {
-          accountId,
-          isActive: true,
-          deletedAt: null,
-        },
-      },
-    },
-    select: { id: true },
-  });
+  return !!gate;
 }
 
 module.exports = {
   findCredentialByTypeAndIdentifier,
-  hasGateAccess,
   hasGateAccessByAccount,
+  hasGateAccessByMembership,
 };

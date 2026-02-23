@@ -16,7 +16,7 @@ function findAllEventosPorton(usuarioToken, filtros = {}) {
       ...(filtros.accion ? { accion: String(filtros.accion) } : {}),
     },
     include: {
-      usuario: true,
+      identity: true,
       cuenta: true,
       porton: true,
       grupoPortones: true,
@@ -32,7 +32,7 @@ function findEventoPortonById(id, usuarioToken) {
       ...scope(usuarioToken),
     },
     include: {
-      usuario: true,
+      identity: true,
       cuenta: true,
       porton: true,
       grupoPortones: true,
