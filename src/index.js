@@ -11,16 +11,20 @@ if (!process.env.DATABASE_URL) {
 const express = require("express");
 const { prisma } = require("./infrastructure/database/prismaClient");
 const { ensureRedisConnection, redisClient } = require("./infrastructure/cache/redisClient");
+const { requestLoggerContext } = require("./middleware/requestLoggerContext");
+const { errorHandler } = require("./middleware/errorHandler");
 const authRouter = require("./modules/auth/auth.controller");
 const usuariosRouter = require("./modules/usuarios/usuarios.controller");
 const gruposPortonesRouter = require("./modules/grupos_portones/grupos_portones.controller");
 const portonesRouter = require("./modules/portones/portones.controller");
 const eventosPortonRouter = require("./modules/eventos_porton/eventos_porton.controller");
 const cultivosRouter = require("./modules/cultivos/cultivos.controller");
+const cultivosLogDemoRouter = require("./modules/cultivos/cultivos.log-demo.controller");
 const telegramRouter = require("./infrastructure/telegram/telegram.controller");
 
 const app = express();
 app.use(express.json());
+app.use(requestLoggerContext);
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
@@ -31,8 +35,11 @@ app.use("/api/usuarios", usuariosRouter);
 app.use("/api/grupos-portones", gruposPortonesRouter);
 app.use("/api/portones", portonesRouter);
 app.use("/api/eventos-porton", eventosPortonRouter);
+app.use("/api/cultivos", cultivosLogDemoRouter);
 app.use("/api/cultivos", cultivosRouter);
 app.use("/api/telegram", telegramRouter);
+
+app.use(errorHandler);
 
 const port = process.env.PORT || 3000;
 const server = app.listen(port, async () => {

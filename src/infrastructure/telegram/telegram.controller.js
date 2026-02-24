@@ -11,6 +11,7 @@ const {
   isPortonesEnabledForMembership,
   isCultivosEnabledForMembership,
   buildPortonGroupScopeForMembership,
+  buildCultivoScopeForMembership,
   buildGateScopeForMembership,
   MEMBERSHIP_ROLES,
 } = require("../../modules/identity/identity.telegram.service");
@@ -259,21 +260,13 @@ router.get("/bot/modulos/cultivos", authenticateBotSecret, async (req, res) => {
       });
     }
 
-    if (ctx.activeMembership.role === MEMBERSHIP_ROLES.OPERATOR) {
+    const scope = buildCultivoScopeForMembership(ctx.activeMembership);
+    if (scope.id === -1) {
       return res.status(403).json({ error: "Sin acceso al módulo cultivos" });
     }
 
-    const where =
-      ctx.activeMembership.role === MEMBERSHIP_ROLES.SUPERADMIN
-        ? { isActive: true, deletedAt: null }
-        : {
-            accountId: ctx.activeMembership.accountId,
-            isActive: true,
-            deletedAt: null,
-          };
-
     const cultivos = await prisma.cultivo.findMany({
-      where,
+      where: scope,
       orderBy: { id: "asc" },
     });
 
@@ -283,6 +276,67 @@ router.get("/bot/modulos/cultivos", authenticateBotSecret, async (req, res) => {
         id: c.id,
         nombre: c.nombre,
         descripcion: c.descripcion,
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /bot/modulos/cultivos/:cultivoId/macetas
+router.get("/bot/modulos/cultivos/:cultivoId/macetas", authenticateBotSecret, async (req, res) => {
+  const cultivoId = parseInt(req.params.cultivoId, 10);
+  if (Number.isNaN(cultivoId) || cultivoId <= 0) {
+    return res.status(400).json({ error: "cultivoId inválido" });
+  }
+
+  try {
+    const ctx = await resolveBotIdentityOrFail(req, res);
+    if (!ctx) return;
+
+    if (ctx.requiresAccountSelection) {
+      return res.status(400).json({
+        error: "Selección de cuenta requerida",
+        requiresAccountSelection: true,
+      });
+    }
+
+    const scope = buildCultivoScopeForMembership(ctx.activeMembership);
+    if (scope.id === -1) {
+      return res.status(403).json({ error: "Sin acceso al módulo cultivos" });
+    }
+
+    const cultivoWhere = {
+      id: cultivoId,
+      ...scope,
+      isActive: true,
+      deletedAt: null,
+    };
+
+    const cultivo = await prisma.cultivo.findFirst({
+      where: cultivoWhere,
+      select: { id: true, nombre: true },
+    });
+
+    if (!cultivo) {
+      return res.status(404).json({ error: "Cultivo no encontrado o sin acceso" });
+    }
+
+    const macetas = await prisma.maceta.findMany({
+      where: {
+        cultivoId: cultivo.id,
+        isActive: true,
+      },
+      orderBy: { nombre: "asc" },
+    });
+
+    return res.status(200).json({
+      module: "cultivos",
+      cultivo: { id: cultivo.id, nombre: cultivo.nombre },
+      macetas: macetas.map((m) => ({
+        id: m.id,
+        nombre: m.nombre,
+        identificador: m.identificador,
       })),
     });
   } catch (err) {

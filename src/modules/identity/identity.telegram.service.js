@@ -147,6 +147,30 @@ function buildPortonGroupScopeForMembership(membership) {
 }
 
 /**
+ * Construye el where para Cultivo según membership.
+ * Mismo patrón conceptual que buildPortonGroupScopeForMembership.
+ * OPERATOR: por ahora cultivos no habilitados → { id: -1 }.
+ */
+function buildCultivoScopeForMembership(membership) {
+  if (!membership) return { id: -1 };
+
+  if (membership.role === MEMBERSHIP_ROLES.SUPERADMIN) {
+    return { isActive: true, deletedAt: null };
+  }
+
+  if (membership.role === MEMBERSHIP_ROLES.ADMIN) {
+    return {
+      accountId: membership.accountId,
+      isActive: true,
+      deletedAt: null,
+    };
+  }
+
+  // OPERATOR: cultivos no habilitados por ahora
+  return { id: -1 };
+}
+
+/**
  * Construye el where para Gate según membership.
  */
 function buildGateScopeForMembership(membership) {
@@ -223,6 +247,7 @@ module.exports = {
   isPortonesEnabledForMembership,
   isCultivosEnabledForMembership,
   buildPortonGroupScopeForMembership,
+  buildCultivoScopeForMembership,
   buildGateScopeForMembership,
   hasOpenAccess,
   MEMBERSHIP_ROLES,

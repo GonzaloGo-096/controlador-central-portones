@@ -212,9 +212,124 @@ model Cultivo {
   deletedAt   DateTime? @map("deleted_at")
 
   account     Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  macetas     Maceta[]
 
   @@index([accountId], map: "idx_cultivos_account_id")
   @@map("cultivos")
+}
+
+// ─── Módulo Cultivos: riego adaptativo por maceta ─────────────────────────────
+
+model Maceta {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cultivoId      Int       @map("cultivo_id")
+  nombre         String
+  identificador  String?
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  cultivo              Cultivo            @relation(fields: [cultivoId], references: [id], onDelete: Restrict)
+  sensoresLecturas     SensoresLectura[]
+  riegos               Riego[]
+  parametrosRiego      ParametrosRiego[]
+  adaptaciones         Adaptacion[]
+  logsSistema          LogSistema[]
+
+  @@index([cultivoId], map: "idx_macetas_cultivo_id")
+  @@map("macetas")
+}
+
+model SensoresLectura {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  macetaId   String   @map("maceta_id") @db.Uuid
+  humedad    Float?
+  temperatura Float?
+  ec         Float?
+  extras     Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  maceta Maceta @relation(fields: [macetaId], references: [id], onDelete: Restrict)
+
+  @@index([macetaId, createdAt(sort: Desc)], map: "idx_sensores_lecturas_maceta_created_at_desc")
+  @@map("sensores_lecturas")
+}
+
+model Riego {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  macetaId   String   @map("maceta_id") @db.Uuid
+  volumenMl  Int      @map("volumen_ml")
+  ejecutadoAt DateTime @map("ejecutado_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  maceta      Maceta       @relation(fields: [macetaId], references: [id], onDelete: Restrict)
+  adaptaciones Adaptacion[]
+
+  @@index([macetaId], map: "idx_riegos_maceta_id")
+  @@index([ejecutadoAt], map: "idx_riegos_ejecutado_at")
+  @@map("riegos")
+}
+
+model ParametrosRiego {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  macetaId             String    @map("maceta_id") @db.Uuid
+  version              Int       @default(1)
+  humedadObjetivoMin   Float?    @map("humedad_objetivo_min")
+  humedadObjetivoMax   Float?    @map("humedad_objetivo_max")
+  volumenMlBase        Int?      @map("volumen_ml_base")
+  vigenteDesde         DateTime  @default(now()) @map("vigente_desde")
+  vigenteHasta         DateTime? @map("vigente_hasta")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  maceta Maceta @relation(fields: [macetaId], references: [id], onDelete: Restrict)
+
+  @@index([macetaId], map: "idx_parametros_riego_maceta_id")
+  @@map("parametros_riego")
+}
+
+model Adaptacion {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  macetaId             String   @map("maceta_id") @db.Uuid
+  riegoId              String?  @map("riego_id") @db.Uuid
+  tipo                 String
+  parametrosAnteriores Json?    @map("parametros_anteriores")
+  parametrosNuevos     Json?    @map("parametros_nuevos")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  maceta Maceta @relation(fields: [macetaId], references: [id], onDelete: Restrict)
+  riego  Riego? @relation(fields: [riegoId], references: [id], onDelete: SetNull)
+
+  @@unique([riegoId, tipo], map: "uq_adaptaciones_riego_tipo")
+  @@index([macetaId], map: "idx_adaptaciones_maceta_id")
+  @@index([riegoId], map: "idx_adaptaciones_riego_id")
+  @@index([createdAt], map: "idx_adaptaciones_created_at")
+  @@map("adaptaciones")
+}
+
+model LogSistema {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nivel     String
+  mensaje   String
+  contexto  Json?
+  modulo    String?
+  evento    String?
+  userId    Int?     @map("user_id")
+  cultivoId Int?     @map("cultivo_id")
+  cicloId   String?  @map("ciclo_id") @db.Uuid
+  macetaId  String?  @map("maceta_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  maceta Maceta? @relation(fields: [macetaId], references: [id], onDelete: SetNull)
+
+  @@index([macetaId], map: "idx_logs_sistema_maceta_id")
+  @@index([createdAt], map: "idx_logs_sistema_created_at")
+  @@index([nivel], map: "idx_logs_sistema_nivel")
+  @@index([modulo], map: "idx_logs_sistema_modulo")
+  @@index([evento], map: "idx_logs_sistema_evento")
+  @@index([userId], map: "idx_logs_sistema_user_id")
+  @@index([cultivoId], map: "idx_logs_sistema_cultivo_id")
+  @@map("logs_sistema")
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────

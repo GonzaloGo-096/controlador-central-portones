@@ -5,11 +5,16 @@ const { toJSONSafe } = require("../../shared/utils/serialization");
 const { authenticateJwt } = require("../../middleware/authenticateJwt");
 const { requireRoles, ADMIN_ACCESS_ROLES } = require("../../middleware/requireRoles");
 const { isSuperadmin, requireAccountId } = require("../../shared/utils/scope");
+const riegoEvaluacionController = require("./controllers/RiegoEvaluacionController");
+const riegoAdaptacionController = require("./controllers/RiegoAdaptacionController");
 
 const router = express.Router();
 
 router.use(authenticateJwt);
 router.use(requireRoles(ADMIN_ACCESS_ROLES));
+
+router.use("/macetas", riegoAdaptacionController);
+router.use("/macetas", riegoEvaluacionController);
 
 router.get("/", async (req, res) => {
   const rows = await service.getCultivos(req.user);

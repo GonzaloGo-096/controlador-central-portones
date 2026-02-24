@@ -31,6 +31,13 @@ async function runSeed() {
       await tx.accountMembership.deleteMany();
       await tx.identity.deleteMany();
       await tx.gate.deleteMany();
+      // Módulo cultivos: orden por FK (hijos antes que padres)
+      await tx.logSistema.deleteMany();
+      await tx.adaptacion.deleteMany();
+      await tx.parametrosRiego.deleteMany();
+      await tx.riego.deleteMany();
+      await tx.sensoresLectura.deleteMany();
+      await tx.maceta.deleteMany();
       await tx.cultivo.deleteMany();
       await tx.portonGroup.deleteMany();
       await tx.account.deleteMany();
@@ -121,6 +128,63 @@ async function runSeed() {
         },
       });
 
+      const maceta = await tx.maceta.create({
+        data: {
+          cultivoId: cultivo.id,
+          nombre: "Maceta 1",
+          identificador: "M1",
+          isActive: true,
+        },
+      });
+
+      await tx.parametrosRiego.create({
+        data: {
+          macetaId: maceta.id,
+          version: 1,
+          humedadObjetivoMin: 30,
+          humedadObjetivoMax: 70,
+          volumenMlBase: 150,
+        },
+      });
+
+      await tx.sensoresLectura.create({
+        data: {
+          macetaId: maceta.id,
+          humedad: 45.5,
+          temperatura: 22.0,
+          ec: null,
+        },
+      });
+
+      const ahora = new Date();
+      await tx.riego.create({
+        data: {
+          macetaId: maceta.id,
+          volumenMl: 120,
+          ejecutadoAt: ahora,
+        },
+      });
+
+      await tx.adaptacion.create({
+        data: {
+          macetaId: maceta.id,
+          tipo: "recalibracion_inicial",
+          parametrosAnteriores: {},
+          parametrosNuevos: { humedadMin: 30, humedadMax: 70, volumenMl: 150 },
+        },
+      });
+
+      await tx.logSistema.create({
+        data: {
+          nivel: "info",
+          mensaje: "Seed módulo cultivos",
+          modulo: "cultivos",
+          evento: "seed",
+          cultivoId: cultivo.id,
+          contexto: { macetaId: maceta.id, cultivoId: cultivo.id },
+        },
+      });
+
       await tx.eventoPorton.create({
         data: {
           identityId: identity.id,
@@ -139,6 +203,7 @@ async function runSeed() {
         membershipId: membership.id,
         gateId: gate.id,
         cultivoId: cultivo.id,
+        macetaId: maceta.id,
       };
     }, { timeout: 30000, maxWait: 10000 });
 
