@@ -82,11 +82,15 @@ async function abrirPortonConDebounce({ portonId, usuarioToken, canal }) {
   const porton = await repository.findPortonById(portonId, usuarioToken);
   if (!porton) return { notFound: true };
 
-  const redis = await ensureRedisConnection();
-  const debounceKey = `debounce:porton:abrir:${portonId}`;
-  const debounceResult = await redis.set(debounceKey, "1", { EX: 2, NX: true });
-  if (debounceResult !== "OK") {
-    return { debounced: true };
+  try {
+    const redis = await ensureRedisConnection();
+    const debounceKey = `debounce:porton:abrir:${portonId}`;
+    const debounceResult = await redis.set(debounceKey, "1", { EX: 2, NX: true });
+    if (debounceResult !== "OK") {
+      return { debounced: true };
+    }
+  } catch (_err) {
+    // Redis no disponible: se omite debounce, se permite abrir
   }
 
   const cuentaId = isSuperadmin(usuarioToken)
