@@ -103,7 +103,12 @@ async function abrirPortonConDebounce({ portonId, usuarioToken, canal }) {
   });
 
   if (mqttBridge.isConnected()) {
-    mqttBridge.handleUserPress(porton.id);
+    try {
+      mqttBridge.handleUserPress(porton.id);
+    } catch (err) {
+      console.error("[abrirPortonConDebounce] Error al publicar MQTT:", err?.message || err);
+      if (err?.stack) console.error(err.stack);
+    }
   }
   return { ok: true };
 }

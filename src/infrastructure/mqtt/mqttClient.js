@@ -16,7 +16,7 @@ const STATUS_TOPIC_PATTERN = "portones/+/status";
 const STATUS_TOPIC_TEMPLATE = "portones/{portonId}/status";
 const COMMAND_TOPIC_TEMPLATE = "portones/{portonId}/command";
 
-const VALID_COMMANDS = ["OPEN", "CLOSE", "STOP"];
+const VALID_COMMANDS = ["boton_presionado"];
 
 /**
  * Valida que el mensaje tenga la forma esperada: { event, timestamp }
@@ -133,14 +133,12 @@ function createMqttClient(config, getStateMachine, onStateChange) {
           return;
         }
 
-        const stateMachine = getStateMachine(portonId);
         const event = payload.event;
-
         console.log(`📩 [${portonId}] Mensaje recibido: event=${event}, timestamp=${payload.timestamp}`);
 
-        const result = stateMachine.handleEvent(event);
-
-        if (typeof onStateChange === "function") {
+        const stateMachine = getStateMachine(portonId);
+        if (stateMachine && typeof onStateChange === "function") {
+          const result = stateMachine.handleEvent(event);
           onStateChange(portonId, result);
         }
       });
@@ -158,7 +156,7 @@ function createMqttClient(config, getStateMachine, onStateChange) {
     /**
      * Publica un comando en portones/{portonId}/command
      * @param {string} portonId - Identificador del portón
-     * @param {string} command - "OPEN" | "CLOSE" | "STOP"
+     * @param {string} command - "boton_presionado"
      */
     publishCommand(portonId, command) {
       if (!client || !client.connected) {
@@ -168,7 +166,7 @@ function createMqttClient(config, getStateMachine, onStateChange) {
 
       if (!VALID_COMMANDS.includes(command)) {
         console.warn(
-          `⚠️ Comando inválido "${command}". Debe ser OPEN, CLOSE o STOP.`
+          `⚠️ Comando inválido "${command}". Debe ser boton_presionado.`
         );
         return;
       }
@@ -179,13 +177,17 @@ function createMqttClient(config, getStateMachine, onStateChange) {
         timestamp: new Date().toISOString(),
       };
 
-      client.publish(topic, JSON.stringify(payload), (err) => {
-        if (err) {
-          console.error(`❌ Error al publicar en ${topic}:`, err.message);
-        } else {
-          console.log(`📤 [${portonId}] Comando publicado: ${command}`);
-        }
-      });
+      try {
+        client.publish(topic, JSON.stringify(payload), (err) => {
+          if (err) {
+            console.error(`❌ Error al publicar en ${topic}:`, err.message);
+          } else {
+            console.log(`📤 [${portonId}] Comando publicado: ${command}`);
+          }
+        });
+      } catch (err) {
+        console.error(`❌ MQTT publish throw: ${topic}`, err?.message || err);
+      }
     },
   };
 }

@@ -1,40 +1,33 @@
 /**
- * Bridge MQTT + FSM. Centraliza el cliente MQTT, el registro de state machines
- * y la función handleUserPress para que portones.service pueda publicar comandos.
- * Se inicializa en index.js cuando MQTT_BROKER_URL está definido.
+ * Bridge MQTT. Publica "boton_presionado" al pulsar.
+ * Sin FSM ni OPEN/CLOSE/STOP.
  */
 
-const { StateMachine } = require("../../core/stateMachine");
 const { createMqttClient } = require("./mqttClient");
-const { dispatch } = require("../../core/actionDispatcher");
 
-const stateMachines = new Map();
-
-function getStateMachine(portonId) {
-  const key = String(portonId);
-  if (!stateMachines.has(key)) {
-    stateMachines.set(key, new StateMachine());
-  }
-  return stateMachines.get(key);
-}
-
-function onStateChange(portonId, result) {
-  if (mqttWrapper) {
-    dispatch(portonId, result, mqttWrapper);
-  }
-}
+const CMD_BOTON_PRESIONADO = "boton_presionado";
 
 let mqttWrapper = null;
 let rawClient = null;
 
+function getStateMachine() {
+  return null;
+}
+function onStateChange() {}
+
 /**
- * Envía PRESS a la FSM del portón. Si hay cambio de estado, actionDispatcher publica el comando MQTT.
+ * Publica el único comando: botón presionado.
  * @param {string|number} portonId - id del gate
  */
 function handleUserPress(portonId) {
-  const sm = getStateMachine(portonId);
-  const result = sm.handleEvent("PRESS");
-  onStateChange(String(portonId), result);
+  try {
+    if (mqttWrapper?.publishCommand) {
+      mqttWrapper.publishCommand(String(portonId), CMD_BOTON_PRESIONADO);
+    }
+  } catch (err) {
+    console.error("[mqttBridge.handleUserPress] Error:", err?.message || err);
+    if (err?.stack) console.error(err.stack);
+  }
 }
 
 /**
@@ -65,7 +58,6 @@ function isConnected() {
 }
 
 const bridge = {
-  getStateMachine,
   handleUserPress,
   connect,
   disconnect,
