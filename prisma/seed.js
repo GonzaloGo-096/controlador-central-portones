@@ -31,6 +31,7 @@ async function runSeed() {
       await tx.accountMembership.deleteMany();
       await tx.identity.deleteMany();
       await tx.gate.deleteMany();
+      await tx.device.deleteMany();
       // Módulo cultivos: orden por FK (hijos antes que padres)
       await tx.logSistema.deleteMany();
       await tx.adaptacion.deleteMany();
@@ -99,9 +100,19 @@ async function runSeed() {
         },
       });
 
+      const device = await tx.device.create({
+        data: {
+          deviceKey: "gate-seed-1",
+          accountId: account.id,
+          type: "GATE",
+          isActive: true,
+        },
+      });
+
       const gate = await tx.gate.create({
         data: {
           portonGroupId: portonGroup.id,
+          deviceId: device.id,
           name: "Satlta 608",
           type: "vehicular",
           identifier: "SATLTA-608",
