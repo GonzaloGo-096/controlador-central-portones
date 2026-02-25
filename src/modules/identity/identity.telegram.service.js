@@ -1,15 +1,21 @@
 /**
  * Servicio de resolución de identidad para Telegram.
- * resolveIdentityFromTelegramId, getMemberships, cálculos de módulos y scope.
+ * Orquesta: Identity + memberships, delega scope a authorization.
  */
 
 const identityRepository = require("./identity.repository");
+const { hasOpenAccess: gateAccessHasOpenAccess } = require("../../shared/authorization/gateAccess");
+const {
+  buildPortonGroupScopeForMembership,
+  buildGateScopeForMembership,
+  isPortonesEnabledForMembership: isPortonesEnabledFromScope,
+} = require("../../shared/authorization/portonesScope");
+const {
+  buildCultivoScopeForMembership,
+  isCultivosEnabledForMembership: isCultivosEnabledFromScope,
+} = require("../../shared/authorization/cultivosScope");
 
-const MEMBERSHIP_ROLES = {
-  SUPERADMIN: "SUPERADMIN",
-  ADMIN: "ADMIN",
-  OPERATOR: "OPERATOR",
-};
+const MEMBERSHIP_ROLES = { SUPERADMIN: "SUPERADMIN", ADMIN: "ADMIN", OPERATOR: "OPERATOR" };
 
 /**
  * Resuelve Identity desde telegramId.
@@ -66,184 +72,69 @@ async function getMemberships(identityId) {
   };
 }
 
-/**
- * Calcula si Portones está habilitado para el membership activo.
- * Admin: true si hay al menos 1 portonGroup en la cuenta.
- * Operator: true si hay al menos 1 MembershipPortonGroup o MembershipGatePermission.
- */
 async function isPortonesEnabledForMembership(membership) {
-  if (!membership) return false;
+  return isPortonesEnabledFromScope(membership);
+}
 
-  if (membership.role === MEMBERSHIP_ROLES.SUPERADMIN || membership.role === MEMBERSHIP_ROLES.ADMIN) {
-    const { prisma } = require("../../infrastructure/database/prismaClient");
-    const count = await prisma.portonGroup.count({
-      where: {
-        accountId: membership.accountId,
-        isActive: true,
-        deletedAt: null,
-      },
-    });
-    return count > 0;
-  }
-
-  const groupsCount = membership.portonGroups?.length ?? 0;
-  const gatesCount = membership.gatePermissions?.length ?? 0;
-  return groupsCount > 0 || gatesCount > 0;
+async function isCultivosEnabledForMembership(membership) {
+  return isCultivosEnabledFromScope(membership);
 }
 
 /**
- * Calcula si Cultivos está habilitado para el membership activo.
- * Solo admins; operadores nunca.
+ * Devuelve los gates autorizados para un telegramId (vía Identity + memberships).
+ * @param {string|number} telegramId
+ * @returns {Promise<Array<{ gateId: number, gateName: string, identifier?: string | null, topic_mqtt?: string | null }>>}
  */
-async function isCultivosEnabledForMembership(membership) {
-  if (!membership || membership.role === MEMBERSHIP_ROLES.OPERATOR) return false;
+async function getAuthorizedGatesForTelegramId(telegramId) {
+  const resolved = await resolveIdentityFromTelegramId(telegramId);
+  if (!resolved || !resolved.memberships?.length) return [];
 
   const { prisma } = require("../../infrastructure/database/prismaClient");
-  const count = await prisma.cultivo.count({
-    where:
-      membership.role === MEMBERSHIP_ROLES.SUPERADMIN
-        ? { isActive: true, deletedAt: null }
-        : {
-            accountId: membership.accountId,
-            isActive: true,
-            deletedAt: null,
-          },
-  });
-  return count > 0;
+  const memberships = await identityRepository.getMembershipsWithScopes(resolved.identity.id);
+  const seenIds = new Set();
+  const result = [];
+
+  for (const m of memberships) {
+    if (m.status !== "ACTIVE") continue;
+    let where = { isActive: true, deletedAt: null };
+    if (m.role === MEMBERSHIP_ROLES.SUPERADMIN) {
+      // todos los gates
+    } else if (m.role === MEMBERSHIP_ROLES.ADMIN) {
+      where.portonGroup = { accountId: m.accountId, isActive: true, deletedAt: null };
+    } else {
+      const scope = buildGateScopeForMembership(m);
+      if (scope.id === -1) continue;
+      where = { ...where, ...scope };
+    }
+    const rows = await prisma.gate.findMany({
+      where,
+      select: { id: true, name: true, identifier: true, topicMqtt: true },
+    });
+    for (const g of rows) {
+      if (seenIds.has(g.id)) continue;
+      seenIds.add(g.id);
+      result.push({
+        gateId: g.id,
+        gateName: g.name,
+        identifier: g.identifier ?? null,
+        topic_mqtt: g.topicMqtt ?? null,
+      });
+    }
+  }
+  return result;
 }
 
 /**
- * Construye el where para PortonGroup según membership.
- */
-function buildPortonGroupScopeForMembership(membership) {
-  if (!membership) return { id: -1 };
-
-  if (membership.role === MEMBERSHIP_ROLES.SUPERADMIN) {
-    return { isActive: true, deletedAt: null };
-  }
-
-  if (membership.role === MEMBERSHIP_ROLES.ADMIN) {
-    return {
-      accountId: membership.accountId,
-      isActive: true,
-      deletedAt: null,
-    };
-  }
-
-  const groupIds = (membership.portonGroups || []).map((g) => g.portonGroupId);
-  const gateIds = (membership.gatePermissions || []).map((gp) => gp.gate?.portonGroupId).filter(Boolean);
-  const allGroupIds = [...new Set([...groupIds, ...gateIds])];
-
-  if (allGroupIds.length === 0) {
-    return { id: -1 };
-  }
-
-  return {
-    id: { in: allGroupIds },
-    accountId: membership.accountId,
-    isActive: true,
-    deletedAt: null,
-  };
-}
-
-/**
- * Construye el where para Cultivo según membership.
- * Mismo patrón conceptual que buildPortonGroupScopeForMembership.
- * OPERATOR: por ahora cultivos no habilitados → { id: -1 }.
- */
-function buildCultivoScopeForMembership(membership) {
-  if (!membership) return { id: -1 };
-
-  if (membership.role === MEMBERSHIP_ROLES.SUPERADMIN) {
-    return { isActive: true, deletedAt: null };
-  }
-
-  if (membership.role === MEMBERSHIP_ROLES.ADMIN) {
-    return {
-      accountId: membership.accountId,
-      isActive: true,
-      deletedAt: null,
-    };
-  }
-
-  // OPERATOR: cultivos no habilitados por ahora
-  return { id: -1 };
-}
-
-/**
- * Construye el where para Gate según membership.
- */
-function buildGateScopeForMembership(membership) {
-  if (!membership) return { id: -1 };
-
-  if (membership.role === MEMBERSHIP_ROLES.SUPERADMIN || membership.role === MEMBERSHIP_ROLES.ADMIN) {
-    return {};
-  }
-
-  const gateIds = (membership.gatePermissions || []).map((gp) => gp.gateId);
-  const groupIds = (membership.portonGroups || []).map((g) => g.portonGroupId);
-
-  if (gateIds.length === 0 && groupIds.length === 0) {
-    return { id: -1 };
-  }
-
-  const scope = {
-    isActive: true,
-    deletedAt: null,
-    OR: [],
-  };
-
-  if (gateIds.length > 0) {
-    scope.OR.push({ id: { in: gateIds } });
-  }
-  if (groupIds.length > 0) {
-    scope.OR.push({ portonGroupId: { in: groupIds } });
-  }
-
-  return scope;
-}
-
-/**
- * Verifica si el membership tiene permiso para abrir el gate (para uso futuro).
+ * Delega a gateAccess.hasOpenAccess para mantener compatibilidad.
  */
 async function hasOpenAccess(membership, gateId) {
-  if (!membership) return false;
-  if (membership.role === MEMBERSHIP_ROLES.SUPERADMIN || membership.role === MEMBERSHIP_ROLES.ADMIN) {
-    const { prisma } = require("../../infrastructure/database/prismaClient");
-    const gate = await prisma.gate.findFirst({
-      where: { id: gateId, isActive: true, deletedAt: null },
-      include: { portonGroup: { select: { accountId: true } } },
-    });
-    if (!gate) return false;
-    if (membership.role === MEMBERSHIP_ROLES.SUPERADMIN) return true;
-    return gate.portonGroup.accountId === membership.accountId;
-  }
-
-  const hasDirect = await identityRepository.hasGatePermissionByMembership(
-    membership.id,
-    gateId,
-    "open"
-  );
-  if (hasDirect) return true;
-
-  const groupIds = (membership.portonGroups || []).map((g) => g.portonGroupId);
-  if (groupIds.length === 0) return false;
-
-  const { prisma } = require("../../infrastructure/database/prismaClient");
-  const gate = await prisma.gate.findFirst({
-    where: {
-      id: gateId,
-      portonGroupId: { in: groupIds },
-      isActive: true,
-      deletedAt: null,
-    },
-  });
-  return !!gate;
+  return gateAccessHasOpenAccess(membership, gateId);
 }
 
 module.exports = {
   resolveIdentityFromTelegramId,
   getMemberships,
+  getAuthorizedGatesForTelegramId,
   isPortonesEnabledForMembership,
   isCultivosEnabledForMembership,
   buildPortonGroupScopeForMembership,

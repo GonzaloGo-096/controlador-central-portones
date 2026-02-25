@@ -80,8 +80,8 @@ router.get("/_prod_db_test", async (req, res) => {
     // Test 3: conteos (solo si existen las tablas)
     const counts = {};
     const countSteps = [
-      { key: "users", step: "count_users" },
-      { key: "tenants", step: "count_tenants" },
+      { key: "identities", step: "count_identities" },
+      { key: "accounts", step: "count_accounts" },
       { key: "gates", step: "count_gates" },
     ];
     for (const { key, step } of countSteps) {

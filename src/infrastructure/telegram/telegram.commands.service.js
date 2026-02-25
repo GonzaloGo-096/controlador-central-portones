@@ -1,21 +1,24 @@
 /**
- * Telegram commands: authorize user→gate and translate human action into FSM event.
- * No HTTP, no bot details. Uses existing repo; receives getStateMachine + onStateChange by injection.
+ * Comandos Telegram: valida permiso (Identity) y traduce acción a evento FSM.
  */
 
-const { getAuthorizedGatesByTelegramId } = require("../../modules/users/user.repository");
+const {
+  resolveIdentityFromTelegramId,
+  getMemberships,
+  hasOpenAccess,
+} = require("../../modules/identity/identity.telegram.service");
 
 const VALID_ACTIONS = ["OPEN", "CLOSE", "STOP"];
 const USER_EVENT = "PRESS";
 
 /**
- * Executes a command from a Telegram user: validates permission, sends one PRESS to the FSM.
+ * Ejecuta un comando de un usuario Telegram: valida permiso, envía PRESS a la FSM.
  *
  * @param {Object} params
  * @param {string|number} params.telegramId
- * @param {string|number} params.gateId - gate the user wants to operate (used as portonId for FSM)
- * @param {string} params.action - OPEN | CLOSE | STOP (user intent; FSM receives PRESS)
- * @param {Object} deps - injected so this module does not depend on core or index
+ * @param {string|number} params.gateId
+ * @param {string} params.action - OPEN | CLOSE | STOP
+ * @param {Object} deps
  * @param {Function} deps.getStateMachine - (portonId) => StateMachine
  * @param {Function} deps.onStateChange - (portonId, result) => void
  * @returns {Promise<{ accepted: true } | { accepted: false, reason: 'FORBIDDEN' | 'INVALID_ACTION' }>}
@@ -27,12 +30,30 @@ async function executeTelegramCommand({ telegramId, gateId, action }, { getState
     return { accepted: false, reason: "INVALID_ACTION" };
   }
 
-  const rows = await getAuthorizedGatesByTelegramId(telegramId);
-  const allowedGateIds = new Set(rows.map((r) => r.gate_id).filter((id) => id != null));
-
-  const gateIdNum = Number(gateId);
-  if (Number.isNaN(gateIdNum) || !allowedGateIds.has(gateIdNum)) {
+  const resolved = await resolveIdentityFromTelegramId(telegramId);
+  if (!resolved || !resolved.memberships?.length) {
     return { accepted: false, reason: "FORBIDDEN" };
+  }
+
+  const { activeMembership } = await getMemberships(resolved.identity.id);
+  if (activeMembership) {
+    const allowed = await hasOpenAccess(activeMembership, Number(gateId));
+    if (!allowed) {
+      return { accepted: false, reason: "FORBIDDEN" };
+    }
+  } else {
+    const memberships = await require("../../modules/identity/identity.repository").getMembershipsWithScopes(
+      resolved.identity.id
+    );
+    let allowed = false;
+    for (const m of memberships) {
+      if (m.status !== "ACTIVE") continue;
+      if (await hasOpenAccess(m, Number(gateId))) {
+        allowed = true;
+        break;
+      }
+    }
+    if (!allowed) return { accepted: false, reason: "FORBIDDEN" };
   }
 
   const portonId = String(gateId);

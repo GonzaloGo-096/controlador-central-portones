@@ -76,32 +76,31 @@ async function getSensorHistory(sensorId, start = 0, stop = 49) {
   }
 }
 
-async function getUsersWithCache() {
-  const cacheKey = "cache:users:all";
+async function getIdentitiesWithCache() {
+  const cacheKey = "cache:identities:all";
 
   try {
     const redis = await ensureRedisConnection();
     const cached = await redis.get(cacheKey);
     if (cached) {
-      console.log("[cache] Cache hit: users");
+      console.log("[cache] Cache hit: identities");
       return JSON.parse(cached);
     }
 
-    console.log("[cache] Cache miss: users. Consultando PostgreSQL...");
-    const users = await prisma.users.findMany({
+    console.log("[cache] Cache miss: identities. Consultando PostgreSQL...");
+    const identities = await prisma.identity.findMany({
       orderBy: { id: "asc" },
     });
 
-    await redis.set(cacheKey, stringifyForCache(users), {
+    await redis.set(cacheKey, stringifyForCache(identities), {
       EX: USERS_CACHE_TTL_SECONDS,
     });
-    console.log("[cache] users guardados en Redis (TTL 10 min)");
+    console.log("[cache] identities guardados en Redis (TTL 10 min)");
 
-    return users;
+    return identities;
   } catch (err) {
-    // Fallback determinístico: si Redis falla, igual se responde desde DB.
     console.warn("[cache] Redis no disponible, fallback a PostgreSQL:", formatRedisError(err));
-    return prisma.users.findMany({
+    return prisma.identity.findMany({
       orderBy: { id: "asc" },
     });
   }
@@ -111,5 +110,5 @@ module.exports = {
   saveLatestSensorReading,
   appendSensorHistory,
   getSensorHistory,
-  getUsersWithCache,
+  getIdentitiesWithCache,
 };

@@ -26,8 +26,7 @@ function requireGateAccess(gateIdResolver, options = {}) {
     const access = await authRepository.hasGateAccessByAccount(
       String(req.user.sub),
       gateIdNum,
-      accountId,
-      permission
+      accountId
     );
     if (!access) {
       return res.status(403).json({ error: "Sin acceso al portón" });

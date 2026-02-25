@@ -21,6 +21,7 @@ const eventosPortonRouter = require("./modules/eventos_porton/eventos_porton.con
 const cultivosRouter = require("./modules/cultivos/cultivos.controller");
 const cultivosLogDemoRouter = require("./modules/cultivos/cultivos.log-demo.controller");
 const telegramRouter = require("./infrastructure/telegram/telegram.controller");
+const mqttBridge = require("./infrastructure/mqtt/mqttBridge");
 
 const app = express();
 app.use(express.json());
@@ -49,11 +50,25 @@ const server = app.listen(port, async () => {
   } catch (err) {
     console.warn("[startup] Redis no disponible, se continuará sin cache:", err.message || err);
   }
+  if (process.env.MQTT_BROKER_URL) {
+    try {
+      mqttBridge.connect({
+        brokerUrl: process.env.MQTT_BROKER_URL,
+        username: process.env.MQTT_USERNAME,
+        password: process.env.MQTT_PASSWORD,
+        clientId: process.env.MQTT_CLIENT_ID,
+        testOnConnect: process.env.MQTT_TEST_ON_CONNECT === "true",
+      });
+    } catch (err) {
+      console.warn("[startup] MQTT no disponible:", err.message || err);
+    }
+  }
 });
 
 async function gracefulShutdown() {
   console.log("🛑 Cerrando servicios...");
   server.close();
+  mqttBridge.disconnect();
   await Promise.allSettled([
     prisma.$disconnect(),
     redisClient.isOpen ? redisClient.quit() : Promise.resolve(),

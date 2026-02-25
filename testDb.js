@@ -41,12 +41,12 @@ async function main() {
       SELECT table_name
       FROM information_schema.tables
       WHERE table_schema = 'public'
-      AND table_name IN ('users', 'porton_groups', 'gates')
+      AND table_name IN ('identities', 'porton_groups', 'gates')
       ORDER BY table_name
     `);
     const names = tables.rows.map((r) => r.table_name);
     if (names.length === 3) {
-      console.log("✅ Tablas esperadas presentes: users, porton_groups, gates\n");
+      console.log("✅ Tablas esperadas presentes: identities, porton_groups, gates\n");
     } else {
       console.log("⚠️  Tablas encontradas:", names.length ? names.join(", ") : "ninguna");
       console.log("   (Si faltan, creá las tablas para que el backend funcione con DB real)\n");

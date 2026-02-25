@@ -344,21 +344,38 @@ router.get("/bot/modulos/cultivos/:cultivoId/macetas", authenticateBotSecret, as
   }
 });
 
-// POST /bot/portones/:id/abrir - deshabilitado por ahora (sin MQTT)
+// POST /bot/portones/:id/abrir
 router.post("/bot/portones/:id/abrir", authenticateBotSecret, async (req, res) => {
-  return res.status(501).json({
-    error: "Apertura de portón aún no implementada (MQTT pendiente)",
-  });
-});
-
-// POST /portones/:id/abrir - JWT (para frontend futuro, mantiene estructura)
-router.post(
-  "/portones/:id/abrir",
-  (req, res) => {
-    return res.status(501).json({
-      error: "Apertura de portón aún no implementada (MQTT pendiente)",
-    });
+  const portonId = Number(req.params.id);
+  if (Number.isNaN(portonId)) {
+    return res.status(400).json({ error: "id inválido" });
   }
-);
+  const ctx = await resolveBotIdentityOrFail(req, res);
+  if (!ctx) return;
+  if (ctx.requiresAccountSelection) {
+    return res.status(400).json({ error: "Selección de cuenta requerida" });
+  }
+  const { hasOpenAccess } = require("../../modules/identity/identity.telegram.service");
+  const allowed = await hasOpenAccess(ctx.activeMembership, portonId);
+  if (!allowed) {
+    return res.status(403).json({ error: "Sin permiso para abrir este portón" });
+  }
+  const roleMap = { SUPERADMIN: "superadministrador", ADMIN: "administrador_cuenta", OPERATOR: "operador" };
+  const usuarioToken = {
+    sub: ctx.identity.id,
+    account_id: ctx.activeMembership.accountId,
+    role: roleMap[ctx.activeMembership.role] || ctx.activeMembership.role,
+    membershipId: ctx.activeMembership.id,
+  };
+  const portonesService = require("../../modules/portones/portones.service");
+  const result = await portonesService.abrirPortonConDebounce({
+    portonId,
+    usuarioToken,
+    canal: "telegram",
+  });
+  if (result.notFound) return res.status(404).json({ error: "Portón no encontrado" });
+  if (result.debounced) return res.status(429).json({ error: "Esperá unos segundos" });
+  return res.status(200).json({ ok: true });
+});
 
 module.exports = router;

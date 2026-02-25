@@ -7,7 +7,7 @@ const {
   saveLatestSensorReading,
   appendSensorHistory,
   getSensorHistory,
-  getUsersWithCache,
+  getIdentitiesWithCache,
 } = require("../src/infrastructure/cache/cacheExamples");
 
 async function run() {
@@ -31,11 +31,11 @@ async function run() {
   const history = await getSensorHistory(sensorId, 0, 10);
   console.log("[demo] Histórico parseado:", history);
 
-  const users1 = await getUsersWithCache();
-  console.log(`[demo] users (primera llamada): ${users1.length}`);
+  const identities1 = await getIdentitiesWithCache();
+  console.log(`[demo] identities (primera llamada): ${identities1.length}`);
 
-  const users2 = await getUsersWithCache();
-  console.log(`[demo] users (segunda llamada, cache esperada): ${users2.length}`);
+  const identities2 = await getIdentitiesWithCache();
+  console.log(`[demo] identities (segunda llamada, cache esperada): ${identities2.length}`);
 }
 
 run()

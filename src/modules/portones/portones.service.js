@@ -1,5 +1,9 @@
+const crypto = require("crypto");
 const { ensureRedisConnection } = require("../../infrastructure/cache/redisClient");
+const mqttBridge = require("../../infrastructure/mqtt/mqttBridge");
+const { prisma } = require("../../infrastructure/database/prismaClient");
 const repository = require("./portones.repository");
+const gruposRepository = require("../grupos_portones/grupos_portones.repository");
 const eventosRepository = require("../eventos_porton/eventos_porton.repository");
 const { isSuperadmin, requireAccountId } = require("../../shared/utils/scope");
 
@@ -30,7 +34,32 @@ function getPortonById(id, usuarioToken) {
 }
 
 async function createPorton(payload, usuarioToken) {
-  const created = await repository.createPorton(payload);
+  const group = await gruposRepository.findGrupoPortonesById(payload.portonGroupId, usuarioToken);
+  if (!group) {
+    const err = new Error("Grupo de portones no encontrado o sin acceso");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const deviceKey = `gate-${group.accountId}-${payload.portonGroupId}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+
+  const created = await prisma.$transaction(async (tx) => {
+    const device = await tx.device.create({
+      data: {
+        deviceKey,
+        accountId: group.accountId,
+        type: "GATE",
+        isActive: true,
+      },
+    });
+    return tx.gate.create({
+      data: {
+        ...payload,
+        deviceId: device.id,
+      },
+    });
+  });
+
   await invalidate(usuarioToken);
   return created;
 }
@@ -73,7 +102,9 @@ async function abrirPortonConDebounce({ portonId, usuarioToken, canal }) {
     canal: canal || "web",
   });
 
-  // La apertura es un press simple. FSM no aplicada por requerimiento.
+  if (mqttBridge.isConnected()) {
+    mqttBridge.handleUserPress(porton.id);
+  }
   return { ok: true };
 }
 

@@ -1,28 +1,10 @@
 const { prisma } = require("../../infrastructure/database/prismaClient");
-const { USER_ROLES } = require("../../shared/types/auth.types");
-const { isSuperadmin, requireAccountId } = require("../../shared/utils/scope");
-
-function whereByScope(usuarioToken) {
-  const where = {};
-  if (!isSuperadmin(usuarioToken)) {
-    where.portonGroup = { accountId: requireAccountId(usuarioToken) };
-  }
-  if (usuarioToken?.role === USER_ROLES.OPERADOR) {
-    where.userGates = {
-      some: {
-        userId: Number(usuarioToken.sub),
-        isActive: true,
-        deletedAt: null,
-      },
-    };
-  }
-  return where;
-}
+const { whereByScope } = require("../../shared/utils/scope");
 
 function findAllPortones(usuarioToken) {
   return prisma.gate.findMany({
     where: whereByScope(usuarioToken),
-    include: { portonGroup: true },
+    include: { portonGroup: true, device: true },
     orderBy: { id: "asc" },
   });
 }
@@ -33,7 +15,7 @@ function findPortonById(id, usuarioToken) {
       id,
       ...whereByScope(usuarioToken),
     },
-    include: { portonGroup: true },
+    include: { portonGroup: true, device: true },
   });
 }
 

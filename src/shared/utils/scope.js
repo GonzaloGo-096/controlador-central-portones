@@ -1,4 +1,5 @@
 const { USER_ROLES } = require("../types/auth.types");
+const { buildGateWhereFromMembership } = require("../authorization/gateAccess");
 
 function isSuperadmin(user) {
   return user?.role === USER_ROLES.SUPERADMIN;
@@ -54,20 +55,7 @@ async function buildGateWhereFromToken(usuarioToken) {
     });
   }
   if (!membership) return { id: -1 };
-
-  const groupIds = membership.portonGroups.map((g) => g.portonGroupId);
-  const gateIds = membership.gatePermissions.map((gp) => gp.gateId);
-  if (groupIds.length === 0 && gateIds.length === 0) return { id: -1 };
-
-  const or = [];
-  if (groupIds.length > 0) or.push({ portonGroupId: { in: groupIds } });
-  if (gateIds.length > 0) or.push({ id: { in: gateIds } });
-
-  return {
-    OR: or,
-    isActive: true,
-    deletedAt: null,
-  };
+  return buildGateWhereFromMembership(membership);
 }
 
 /**

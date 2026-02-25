@@ -4,7 +4,6 @@ const service = require("./portones.service");
 const { toJSONSafe } = require("../../shared/utils/serialization");
 const { authenticateJwt } = require("../../middleware/authenticateJwt");
 const { requireRoles, ADMIN_ACCESS_ROLES } = require("../../middleware/requireRoles");
-const { requireGateAccess } = require("../../middleware/requireGateAccess");
 const { USER_ROLES } = require("../../shared/types/auth.types");
 const { isSuperadmin, requireAccountId } = require("../../shared/utils/scope");
 
@@ -43,6 +42,7 @@ router.post("/", requireRoles(ADMIN_ACCESS_ROLES), async (req, res) => {
     );
     return res.status(201).json(toJSONSafe(created));
   } catch (err) {
+    if (err.statusCode === 404) return res.status(404).json({ error: err.message });
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       return res.status(400).json({ error: err.message, code: err.code });
     }
@@ -79,10 +79,17 @@ router.delete("/:id", requireRoles(ADMIN_ACCESS_ROLES), async (req, res) => {
   return res.status(200).json(toJSONSafe(deleted));
 });
 
-router.post("/:id/abrir", (req, res) => {
-  return res.status(501).json({
-    error: "Apertura de portón aún no implementada (MQTT pendiente)",
+router.post("/:id/abrir", async (req, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ error: "id inválido" });
+  const result = await service.abrirPortonConDebounce({
+    portonId: id,
+    usuarioToken: req.user,
+    canal: "web",
   });
+  if (result.notFound) return res.status(404).json({ error: "Portón no encontrado" });
+  if (result.debounced) return res.status(429).json({ error: "Esperá unos segundos antes de volver a abrir" });
+  return res.status(200).json({ ok: true });
 });
 
 module.exports = router;
